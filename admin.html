@@ -193,23 +193,20 @@
                 </div>
                 <div style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-                        <select id="calViewSelector" class="form-input" style="width:auto; padding:6px; margin:0; font-size:14px; font-weight:bold; color:#111; border-color:#C2A878;" onchange="changeCalView(this.value)">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-    <div style="display:flex; gap:10px;">
-        <select id="calViewSelector" class="form-input" style="width:auto; padding:6px; margin:0; font-size:14px; font-weight:bold; color:#111; border-color:#C2A878;" onchange="changeCalView(this.value)">
-            <option value="month">תצוגת חודש</option>
-            <option value="week">תצוגת שבוע</option>
-            <option value="day">תצוגת יום</option>
-        </select>
-        <button class="btn-action" style="background:#28a745; color:white; font-size:12px; padding:6px 12px; border-radius:8px; border:none;" onclick="openWeeklyTemplateModal()">🕒 משמרות קבועות</button>
-    </div>
-    <div style="display:flex; align-items:center; gap:10px; background:#f4f7f6; padding:5px 10px; border-radius:12px;">
-        <button class="calendar-nav-btn" onclick="changeDate(-1)">&rarr;</button>
-        <button class="calendar-nav-btn" style="background:transparent; color:#111; border:1px solid #111;" onclick="goToToday()">היום</button>
-        <strong id="monthYearLabel" style="font-size:15px; min-width:80px; text-align:center;">טוען...</strong>
-        <button class="calendar-nav-btn" onclick="changeDate(1)">&larr;</button>
-    </div>
-</div>
+                        <div style="display:flex; gap:10px;">
+                            <select id="calViewSelector" class="form-input" style="width:auto; padding:6px; margin:0; font-size:14px; font-weight:bold; color:#111; border-color:#C2A878;" onchange="changeCalView(this.value)">
+                                <option value="month">תצוגת חודש</option>
+                                <option value="week">תצוגת שבוע</option>
+                                <option value="day">תצוגת יום</option>
+                            </select>
+                            <button class="btn-action" style="background:#28a745; color:white; font-size:12px; padding:6px 12px; border-radius:8px; border:none;" onclick="openWeeklyTemplateModal()">🕒 משמרות קבועות</button>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px; background:#f4f7f6; padding:5px 10px; border-radius:12px;">
+                            <button class="calendar-nav-btn" onclick="changeDate(-1)">&rarr;</button>
+                            <button class="calendar-nav-btn" style="background:transparent; color:#111; border:1px solid #111;" onclick="goToToday()">היום</button>
+                            <strong id="monthYearLabel" style="font-size:15px; min-width:80px; text-align:center;">טוען...</strong>
+                            <button class="calendar-nav-btn" onclick="changeDate(1)">&larr;</button>
+                        </div>
                     </div>
                     <div class="calendar-grid" id="calendarDayHeaders" style="margin-bottom: 5px;">
                         <div class="calendar-day-header">א'</div><div class="calendar-day-header">ב'</div><div class="calendar-day-header">ג'</div><div class="calendar-day-header">ד'</div><div class="calendar-day-header">ה'</div><div class="calendar-day-header">ו'</div><div class="calendar-day-header">ש'</div>
@@ -396,20 +393,36 @@
 <div class="modal-overlay" id="weeklyTemplateModal">
     <div class="modal-box">
         <h3 style="margin-top:0; text-align:center;">משמרות קבועות 🕒</h3>
-        <p style="font-size:13px; color:#777; text-align:center;">המערכת תפתח עבורך אוטומטית משמרות ל-3 החודשים הקרובים (ימים שכבר פתחת בעבר לא יידרסו ותמיד תוכלי לשנות נקודתית).</p>
+        <p style="font-size:13px; color:#777; text-align:center;">המערכת תפתח משמרות ל-3 החודשים הקרובים (ימים שכבר נפתחו בעבר לא יידרסו).</p>
         
-        <strong>ראשון - חמישי:</strong>
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-            <input type="time" id="defMidweekStart" class="form-input" value="08:00">
-            <span style="align-self:center;">-</span>
-            <input type="time" id="defMidweekEnd" class="form-input" value="18:00">
+        <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:10px; border:1px solid #eee;">
+            <strong>ראשון - חמישי:</strong>
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <input type="time" id="defMidweekStart" class="form-input" value="08:00" style="margin:0;">
+                <span style="align-self:center;">עד</span>
+                <input type="time" id="defMidweekEnd" class="form-input" value="18:00" style="margin:0;">
+            </div>
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <span style="align-self:center; font-size:12px;">הפסקה: מ-</span>
+                <input type="time" id="defMidweekBreakStart" class="form-input" style="margin:0;">
+                <span style="align-self:center; font-size:12px;">עד-</span>
+                <input type="time" id="defMidweekBreakEnd" class="form-input" style="margin:0;">
+            </div>
         </div>
         
-        <strong>שישי:</strong>
-        <div style="display:flex; gap:10px; margin-bottom:20px;">
-            <input type="time" id="defFridayStart" class="form-input" value="08:00">
-            <span style="align-self:center;">-</span>
-            <input type="time" id="defFridayEnd" class="form-input" value="14:00">
+        <div style="background:#f9f9f9; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #eee;">
+            <strong>שישי:</strong>
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <input type="time" id="defFridayStart" class="form-input" value="08:00" style="margin:0;">
+                <span style="align-self:center;">עד</span>
+                <input type="time" id="defFridayEnd" class="form-input" value="14:00" style="margin:0;">
+            </div>
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <span style="align-self:center; font-size:12px;">הפסקה: מ-</span>
+                <input type="time" id="defFridayBreakStart" class="form-input" style="margin:0;">
+                <span style="align-self:center; font-size:12px;">עד-</span>
+                <input type="time" id="defFridayBreakEnd" class="form-input" style="margin:0;">
+            </div>
         </div>
 
         <button class="btn-submit" onclick="generateWeeklyShifts()">פתיחת יומן 🚀</button>
@@ -610,11 +623,13 @@
     });
 
     function initAdminListeners() {
-        db.collection('shifts').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminShifts', JSON.stringify(arr)); if(sessionStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });
-        db.collection('appointments').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('myAppointments', JSON.stringify(arr)); if(sessionStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });
-        db.collection('treatments').onSnapshot(snap => { let arr = []; snap.forEach(doc => { let t = doc.data(); t.id = doc.id; arr.push(t); }); localStorage.setItem('adminTreatments', JSON.stringify(arr)); renderTreatmentsAdmin(); });
-        db.collection('users').onSnapshot((snapshot) => { let allUsers = []; snapshot.forEach(doc => allUsers.push(doc.data())); localStorage.setItem('allUsers', JSON.stringify(allUsers)); renderUsers(); });
-        db.collection('waitlist').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminWaitlist', JSON.stringify(arr)); if(sessionStorage.getItem('adminLoggedIn') === 'true') renderWaitlistAdmin(); });
+        db.collection('shifts').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminShifts', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });
+        db.collection('appointments').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('myAppointments', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });
+        db.collection('treatments').onSnapshot(snap => { let arr = []; snap.forEach(doc => { let t = doc.data(); t.id = doc.id; arr.push(t); }); localStorage.setItem('adminTreatments', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') renderTreatmentsAdmin(); });
+        db.collection('users').onSnapshot((snapshot) => { let allUsers = []; snapshot.forEach(doc => allUsers.push(doc.data())); localStorage.setItem('allUsers', JSON.stringify(allUsers)); if(localStorage.getItem('adminLoggedIn') === 'true') renderUsers(); });
+        try {
+            db.collection('waitlist').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminWaitlist', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') renderWaitlistAdmin(); });
+        } catch(e) {}
     }
 
     window.toggleNotifications = function() {
@@ -973,7 +988,7 @@ window.removeFromWaitlist = function(id) {
         let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
 
         if (calViewMode === 'day') {
-            headers.style.display = 'none'; grid.style.gridTemplateColumns = '1fr';
+            if(headers) headers.style.display = 'none'; grid.style.gridTemplateColumns = '1fr';
             let fullDateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`; 
             let shift = adminShifts.find(s => s && s.date === fullDateStr); 
             let dayApps = allApps.filter(a => a && a.status !== 'canceled' && a.fullDate === fullDateStr).sort((a,b)=>a.time.localeCompare(b.time));
@@ -981,37 +996,35 @@ window.removeFromWaitlist = function(id) {
             let html = `<div style="background:#fafafa; padding:15px; border-radius:12px; border:1px solid #eee;">`;
             html += `<div style="display:flex; justify-content:space-between; margin-bottom:15px; border-bottom:1px solid #ddd; padding-bottom:10px;">
                         <strong>משמרת: ${shift ? `<span style="color:#28a745;">${shift.start} - ${shift.end}</span>` : '<span style="color:#dc3545">לא הוגדרה</span>'}</strong>
-                        <button class="btn-action" style="background:#111; color:#C2A878; padding:4px 10px;" onclick="openShiftModalFromDay()">ערוך משמרת</button>
+                        <button class="btn-action" style="background:#111; color:#C2A878; padding:4px 10px; border-radius:8px;" onclick="openShiftModalFromDay()">ערוך משמרת</button>
                      </div>`;
             if(dayApps.length === 0) html += `<p style="text-align:center; color:#777; font-size:14px;">אין תורים ליום זה.</p>`;
             else {
                 dayApps.forEach(app => {
-    let [h, m] = (app.time || "00:00").split(':').map(Number);
-    let dur = parseInt(app.duration || 60);
-    let endMin = h * 60 + m + dur;
-    let endH = String(Math.floor(endMin / 60)).padStart(2, '0');
-    let endM = String(endMin % 60).padStart(2, '0');
-    let endTimeStr = `${endH}:${endM}`;
-    
-    // הגובה נמתח לפי אורך הטיפול
-    let blockHeight = Math.max(70, dur * 1.5); 
+                    let [h, m] = (app.time || "00:00").split(':').map(Number);
+                    let dur = parseInt(app.duration || 60);
+                    let endMin = h * 60 + m + dur;
+                    let endH = String(Math.floor(endMin / 60)).padStart(2, '0');
+                    let endM = String(endMin % 60).padStart(2, '0');
+                    let endTimeStr = `${endH}:${endM}`;
+                    let blockHeight = Math.max(70, dur * 1.5); 
 
-    html += `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:15px; border-right:5px solid #C2A878; background:#fff; border-radius:8px; margin-bottom:10px; box-shadow:0 3px 10px rgba(0,0,0,0.04); min-height:${blockHeight}px;">
-        <div style="flex:1;">
-            <strong style="color:#111; font-size:16px;">${app.time} - ${endTimeStr}</strong> 
-            <strong style="font-size:16px; text-decoration:underline; cursor:pointer; color:#007bff; margin-right:10px;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}</strong>
-            <br><span style="font-size:14px; color:#555; display:block; margin-top:8px;">${app.treatment} (${dur} דק')</span>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-            <button class="btn-edit" style="padding:6px 12px; font-size:13px;" onclick="openEditAppModal('${app.id}')">✏️ ערוך שעות</button>
-            <button class="btn-block" style="padding:6px 12px; font-size:13px;" onclick="cancelApp('${app.id}')">❌ ביטול תור</button>
-        </div>
-    </div>`;
-});
+                    html += `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:15px; border-right:5px solid #C2A878; background:#fff; border-radius:8px; margin-bottom:10px; box-shadow:0 3px 10px rgba(0,0,0,0.04); min-height:${blockHeight}px;">
+                        <div style="flex:1;">
+                            <strong style="color:#111; font-size:16px;">${app.time} - ${endTimeStr}</strong> 
+                            <strong style="font-size:16px; text-decoration:underline; cursor:pointer; color:#007bff; margin-right:10px;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}</strong>
+                            <br><span style="font-size:14px; color:#555; display:block; margin-top:8px;">${app.treatment} (${dur} דק')</span>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <button class="btn-edit" style="padding:6px 12px; font-size:13px;" onclick="openEditAppModal('${app.id}')">✏️ ערוך שעות</button>
+                            <button class="btn-block" style="padding:6px 12px; font-size:13px;" onclick="cancelApp('${app.id}')">❌ ביטול תור</button>
+                        </div>
+                    </div>`;
+                });
             }
             html += `</div>`; grid.innerHTML = html;
         } else {
-            headers.style.display = 'grid'; grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
+            if(headers) headers.style.display = 'grid'; grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
             if (calViewMode === 'month') { const firstDayIndex = new Date(year, month, 1).getDay(); const daysInMonth = new Date(year, month + 1, 0).getDate(); for(let i = 0; i < firstDayIndex; i++) { grid.appendChild(document.createElement('div')); } for(let d = 1; d <= daysInMonth; d++) { createCell(year, month, d); } } else if (calViewMode === 'week') { let currDayOfWeek = currentCalDate.getDay(); let startOfWeek = new Date(currentCalDate); startOfWeek.setDate(currentCalDate.getDate() - currDayOfWeek); for(let i=0; i<7; i++) { let d = new Date(startOfWeek); d.setDate(startOfWeek.getDate() + i); createCell(d.getFullYear(), d.getMonth(), d.getDate()); } }
         }
     }
@@ -1021,8 +1034,13 @@ window.removeFromWaitlist = function(id) {
     window.generateWeeklyShifts = async function() {
     const mwStart = document.getElementById('defMidweekStart').value;
     const mwEnd = document.getElementById('defMidweekEnd').value;
+    const mwBStart = document.getElementById('defMidweekBreakStart').value;
+    const mwBEnd = document.getElementById('defMidweekBreakEnd').value;
+
     const frStart = document.getElementById('defFridayStart').value;
     const frEnd = document.getElementById('defFridayEnd').value;
+    const frBStart = document.getElementById('defFridayBreakStart').value;
+    const frBEnd = document.getElementById('defFridayBreakEnd').value;
     
     const btn = document.querySelector('#weeklyTemplateModal .btn-submit');
     btn.innerText = 'פותח משמרות...'; btn.disabled = true;
@@ -1037,13 +1055,16 @@ window.removeFromWaitlist = function(id) {
         
         if(adminShifts.find(s => s.date === dateStr)) continue; 
         
-        let start = null, end = null;
-        if(dayOfWeek >= 0 && dayOfWeek <= 4 && mwStart && mwEnd) { start = mwStart; end = mwEnd; } 
-        else if(dayOfWeek === 5 && frStart && frEnd) { start = frStart; end = frEnd; }
+        let start = null, end = null, bStart = "", bEnd = "";
+        if(dayOfWeek >= 0 && dayOfWeek <= 4 && mwStart && mwEnd) { 
+            start = mwStart; end = mwEnd; bStart = mwBStart; bEnd = mwBEnd;
+        } else if(dayOfWeek === 5 && frStart && frEnd) { 
+            start = frStart; end = frEnd; bStart = frBStart; bEnd = frBEnd;
+        }
         
         if(start && end) {
             let ref = db.collection('shifts').doc(dateStr);
-            batch.set(ref, { date: dateStr, start: start, end: end, breakStart: "", breakEnd: "" });
+            batch.set(ref, { date: dateStr, start: start, end: end, breakStart: bStart, breakEnd: bEnd });
             added++;
         }
     }
@@ -1053,6 +1074,7 @@ window.removeFromWaitlist = function(id) {
     
     document.getElementById('weeklyTemplateModal').classList.remove('active');
     btn.innerText = 'פתיחת יומן 🚀'; btn.disabled = false;
+    renderCalendar();
 };
 
     window.openShiftModalFromDay = function() { const year = currentCalDate.getFullYear(); const month = currentCalDate.getMonth(); const date = currentCalDate.getDate(); let fullDateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`; let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let shift = adminShifts.find(s => s && s.date === fullDateStr); openShiftModal(fullDateStr, shift); }

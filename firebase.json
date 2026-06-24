@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "nails-by-natali",
     "public": ".",
     "ignore": [
       "firebase.json",
