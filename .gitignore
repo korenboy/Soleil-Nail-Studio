@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Environment variables (סודות ומפתחות)
+.env
+functions/.env
+
+# Firebase generated files
+.firebase/
+firebase-debug.log
+firebase-debug.*.log    

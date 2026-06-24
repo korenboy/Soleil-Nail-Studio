@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&display=swap');
+
+* { box-sizing: border-box; }
+body {
+  background-color: #e2e8f0; display: flex; justify-content: center; align-items: center;
+  min-height: 100vh; margin: 0; font-family: 'Heebo', sans-serif; direction: rtl;
+}
+
+/* מסגרת האייפון המדומה למסכי מחשב */
+.phone-mockup {
+  width: 393px; height: 852px; background-color: #111;
+  border-radius: 50px; padding: 10px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transition: 0.3s;
+}
+
+.app-screen {
+  background-color: transparent;
+  background-image: url('bg.jpg'); /* כאן רושמים את שם תמונת הרקע שלך */
+  background-size: cover; /* מוודא שהתמונה נמתחת ומכסה את כל המסך */
+  background-position: center; /* ממכז את התמונה */
+  background-repeat: no-repeat; /* מונע מהתמונה לשכפל את עצמה */
+  width: 100%; height: 100%;
+  border-radius: 40px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+}
+
+.screen-container { 
+  padding: 24px 24px 0 24px; 
+  display: flex; flex-direction: column; height: 100%; 
+  overflow-y: auto; 
+}
+.screen-container::-webkit-scrollbar { display: none; }
+
+.header { display: flex; justify-content: space-between; align-items: center; padding: 30px 24px 20px; }
+.menu-btn { font-size: 24px; cursor: pointer; color: #333; }
+.logo { font-size: 20px; font-weight: 700; color: #C2A878; }
+
+/* התחברות ו-SMS */
+.login-box { background-color: #fff; padding: 30px 24px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+.login-box h2 { margin-top: 0; font-size: 22px; color: #333; margin-bottom: 20px;}
+.input-field { width: 100%; padding: 16px; border: 1px solid #eee; border-radius: 12px; margin-bottom: 16px; font-family: inherit; font-size: 16px; outline: none; transition: 0.2s; }
+.input-field:focus { border-color: #C2A878; }
+
+.otp-box { display: none; text-align: center; }
+.otp-inputs { display: flex; gap: 10px; justify-content: center; direction: ltr; margin-bottom: 20px; }
+.otp-inputs input { width: 50px; height: 60px; font-size: 24px; text-align: center; border: 1px solid #ccc; border-radius: 12px; }
+.otp-inputs input:focus { border-color: #C2A878; outline: none; }
+
+.primary-btn { width: 100%; background-color: #111; color: #C2A878; border: none; padding: 18px; border-radius: 16px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; font-family: inherit; }
+.primary-btn:active { transform: scale(0.98); }
+.primary-btn:disabled { background-color: #ccc; color: #777; cursor: not-allowed; }
+
+/* מסך בית */
+.action-card { flex: 1; background-color: #fff; padding: 20px; border-radius: 20px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.03); cursor: pointer; border: 1px solid transparent; transition: 0.2s; }
+.action-card:active { border-color: #C2A878; }
+
+.gallery-scroll { display: flex; overflow-x: auto; gap: 15px; padding-bottom: 20px; margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+.gallery-scroll::-webkit-scrollbar { display: none; }
+.gallery-img { width: 200px !important; height: 200px !important; min-width: 200px; min-height: 200px; aspect-ratio: 1 / 1; border-radius: 20px; object-fit: cover; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+
+/* תפריט צד */
+.side-menu { position: absolute; top: 0; right: -100%; width: 280px; height: 100%; background-color: #fff; z-index: 50; transition: 0.3s ease-in-out; display: flex; flex-direction: column; padding: 60px 24px; box-shadow: -5px 0 20px rgba(0,0,0,0.05); }
+.side-menu.open { right: 0; }
+.close-menu { position: absolute; top: 20px; right: 24px; font-size: 30px; cursor: pointer; color: #999; }
+.menu-header { font-size: 24px; font-weight: 700; color: #C2A878; margin-bottom: 40px; }
+.menu-link { text-decoration: none; color: #333; font-size: 18px; margin-bottom: 20px; font-weight: 500; }
+.menu-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.3); z-index: 40; opacity: 0; pointer-events: none; transition: 0.3s; }
+.menu-overlay.active { opacity: 1; pointer-events: all; }
+
+/* זמנים וטיפולים */
+.treatments-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 100px; }
+.treatment-card { background-color: #fff; padding: 20px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; }
+.treatment-card.selected { border-color: #C2A878; background-color: #fdfbf7; }
+.treatment-card h2 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
+.treatment-card p { margin: 0; font-size: 14px; color: #777; }
+.treatment-card .price { font-weight: 700; color: #C2A878; font-size: 18px; }
+
+.bottom-action { position: absolute; bottom: 0; left: 0; width: 100%; padding: 24px; background: linear-gradient(to top, #FAF9F6 80%, transparent); }
+
+.calendar-wrapper { margin-bottom: 30px; }
+.days-scroll { display: flex; overflow-x: auto; gap: 12px; padding-bottom: 15px; margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+.days-scroll::-webkit-scrollbar { display: none; }
+.day-card { min-width: 80px; background-color: #fff; border: 1px solid rgba(194,168,120,0.2); border-radius: 16px; padding: 15px 10px; text-align: center; cursor: pointer; transition: 0.2s; }
+.day-card strong { font-size: 20px; display: block; margin-top: 5px; color: #333; }
+.day-card.selected { background-color: #111; color: #C2A878; border-color: #111; }
+.day-card.selected strong { color: #C2A878; }
+
+.times-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 100px; }
+.time-btn { background-color: #fff; border: 1px solid rgba(194,168,120,0.2); border-radius: 12px; padding: 12px 0; text-align: center; color: #333; font-weight: 500; cursor: pointer; transition: 0.2s; }
+.time-btn.selected { background-color: #C2A878; color: #fff; border-color: #C2A878; }
+
+/* מודלים כלליים */
+.modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: flex-end; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.3s; border-radius: 40px; overflow: hidden; }
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+.modal-content { background-color: #FAF9F6; width: 100%; height: 80%; border-radius: 30px 30px 0 0; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.3s; }
+.modal-overlay.active .modal-content { transform: translateY(0); }
+.modal-header { padding: 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; }
+.modal-header h2 { margin: 0; font-size: 20px; color: #333; }
+.close-modal { font-size: 28px; color: #999; cursor: pointer; }
+.modal-body { padding: 0; overflow-y: auto; flex-grow: 1; }
+.modal-footer { padding: 20px 24px 30px; border-top: 1px solid #eee; }
+.approve-terms-btn { width: 100%; padding: 16px; background-color: #C2A878; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 500; font-family: inherit; cursor: pointer; }
+
+/* סטטוסים וכרטיסיות תורים */
+.appointment-card { background: #fff; padding: 20px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05); margin-bottom: 15px; transition: 0.3s; }
+.status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+.status-pending { background-color: #fff3cd; color: #856404; }
+.status-approved { background-color: #d4edda; color: #155724; }
+.status-canceled { background-color: #f8d7da; color: #721c24; }
+
+/* סטטיסטיקות שנוספו */
+.stats-row { display: flex; gap: 10px; margin-bottom: 20px; width: 100%; }
+.stat-box { flex: 1; background: #fff; border: 1px solid rgba(194,168,120,0.3); border-radius: 12px; padding: 15px 5px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
+.stat-box .num { font-size: 22px; font-weight: bold; display: block; margin-bottom: 5px; color: #111; }
+.stat-box .lbl { font-size: 12px; color: #777; font-weight: 500; }
+
+/* קלאס להארה וקפיצה לתור */
+.highlight-card { box-shadow: 0 0 20px rgba(194,168,120,0.6) !important; transform: scale(1.02); border-color: #C2A878 !important; }
+
+@media (max-width: 600px) {
+  body { background-color: #FAF9F6; display: block; }
+  .phone-mockup { width: 100%; height: 100vh; border-radius: 0; padding: 0; box-shadow: none; }
+  .app-screen { border-radius: 0; }
+  .modal-overlay { border-radius: 0; }
+}

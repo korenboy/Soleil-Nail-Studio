@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="logo.jpg">
+    <link rel="apple-touch-icon" href="logo.jpg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#FAF9F6">
+
+    <title>Soleil Nail Studio 🤍</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .app-screen {
+            background-color: transparent !important;
+            background-image: url('bg.jpg') !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="phone-mockup">
+  <div class="app-screen">
+    
+    <div class="side-menu" id="sideMenu">
+      <div class="close-menu" id="closeMenuBtn">&times;</div>
+      <div class="menu-header">Soleil Nail Studio</div>
+      <a href="#" class="menu-link" id="menuHome">🏠 מסך הבית</a>
+      <a href="#" class="menu-link" id="menuBookAppointment">🗓️ קביעת תור חדש</a>
+      <a href="#" class="menu-link" id="menuMyApps">💅 התורים שלי</a>
+      <a href="#" class="menu-link" id="menuLogout">🚪 התנתקות</a>
+    </div>
+    <div class="menu-overlay" id="menuOverlay"></div>
+
+    <header class="header" id="mainHeader" style="display: none;">
+      <div class="menu-btn" id="openMenuBtn">☰</div>
+      <div class="logo">Soleil Nail Studio 🤍</div>
+    </header>
+
+    <div id="iosInstallPrompt" style="display: none; background: #fff; padding: 15px; border-radius: 0 0 20px 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); text-align: center; border-bottom: 3px solid #C2A878; z-index: 100; position: absolute; top: 0; width: 100%;">
+        <p style="margin: 0 0 5px 0; font-weight: bold; font-size: 16px;">התקיני אותי כאפליקציה! 📱</p>
+        <p style="margin: 0; font-size: 13px; color: #555;">לחצי למטה על כפתור השיתוף (מרובע עם חץ למעלה) ואז בחרי <strong>"הוסף למסך הבית"</strong>.</p>
+        <button onclick="document.getElementById('iosInstallPrompt').style.display='none'" style="margin-top: 10px; background: none; border: none; color: #999; text-decoration: underline;">הבנתי, סגור</button>
+    </div>
+
+    <div id="loginScreen" class="screen-container active">
+      <div style="text-align: center; margin-bottom: 40px; margin-top: 20px;">
+        <img src="logo.jpg" alt="Soleil Nail Studio" style="width: 160px; height: 160px; object-fit: cover; border-radius: 50%; box-shadow: 0 10px 25px rgba(0,0,0,0.05); margin-bottom: 15px;">
+        <p style="color: #777; font-size: 18px; margin: 0;">הקליניקה לטיפוח הציפורן</p>
+      </div>
+      
+      <div class="login-box" id="loginFormSection">
+        <h2>היי, איזה כיף שבאת! ✨</h2>
+        <input type="text" id="loginName" class="input-field" placeholder="שם מלא (עברית בלבד)">
+        <input type="tel" id="loginPhone" class="input-field" placeholder="טלפון נייד (לדוגמה: 0501234567)">
+        <button class="primary-btn" id="requestOtpBtn">שלחי לי קוד ב-SMS</button>
+      </div>
+
+      <div class="login-box otp-box" id="otpFormSection">
+        <h2>אימות מספר 🔒</h2>
+        <p style="color: #777; margin-bottom: 20px;">הקלידי את הקוד בן 4 הספרות שנשלח ל-<strong id="displayOtpPhone"></strong></p>
+        <div class="otp-inputs">
+            <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
+            <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
+            <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
+            <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
+        </div>
+        <button class="primary-btn" id="verifyOtpBtn">אימות וכניסה</button>
+        <button style="background: none; border: none; color: #C2A878; text-decoration: underline; margin-top: 15px; cursor: pointer;" onclick="cancelOtp()">טעות במספר? חזרה</button>
+      </div>
+    </div>
+
+    <div id="pendingApprovalScreen" class="screen-container" style="display: none; align-items: center; justify-content: center; text-align: center; flex-direction: column;">
+      <div style="font-size: 80px; margin-bottom: 20px;">⏳</div>
+      <h2 style="color: #333; margin-bottom: 10px;">בקשתך נשלחה!</h2>
+      <p style="color: #777; margin-bottom: 30px;">היי <strong id="pendingNameText"></strong>, הפרטים שלך הועברו לנטלי.<br>ברגע שהיא תאשר אותך, תוכלי להתחיל לקבוע תורים.</p>
+      <button class="primary-btn" id="checkApprovalBtn" style="background-color: transparent; color: #333; border: 2px solid #333; margin-bottom: 15px;">רענון סטטוס</button>
+      <button class="primary-btn" id="logoutFromPendingBtn" style="background-color: transparent; color: #dc3545; border: none;">התנתקות</button>
+    </div>
+
+    <div id="homeScreen" class="screen-container" style="display: none;">
+      <h1 id="homeTitle" style="margin-bottom: 5px;">בוקר טוב! ✨</h1>
+      <p id="homeSub" style="color: #777; margin-bottom: 20px;">מה בא לך לעשות היום?</p>
+      
+      <div id="homeAnnounce" style="display:none; background:#111; color:#C2A878; padding:15px; border-radius:12px; margin-bottom:20px; text-align:center; font-weight:500;"></div>
+      
+      <div style="display: flex; gap: 12px; margin-bottom: 30px;">
+        <div class="action-card" id="startBookingFlow">
+          <div style="font-size: 30px; margin-bottom: 10px;">🗓️</div>
+          <strong>קביעת תור חדש</strong>
+        </div>
+        <div class="action-card" id="goToMyAppointments">
+          <div style="font-size: 30px; margin-bottom: 10px;">💅</div>
+          <strong>התורים שלי</strong>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom: 15px; color: #333;">קצת מהעבודות האחרונות 🤍</h3>
+        <div class="gallery-scroll">
+          <img src="gallery1.jpg" alt="עבודה 1" class="gallery-img" id="galleryImg1">
+          <img src="gallery2.jpg" alt="עבודה 2" class="gallery-img" id="galleryImg2">
+          <img src="gallery3.jpg" alt="עבודה 3" class="gallery-img" id="galleryImg3">
+        </div>
+      </div>
+    </div>
+
+    <div id="myAppointmentsScreen" class="screen-container" style="display: none;">
+      <h2 style="margin-top: 0;">התורים שלי 💅</h2>
+      
+      <div id="myStatsContainer" class="stats-row"></div>
+
+      <div id="appointmentsList" style="flex-grow: 1; overflow-y: auto; padding-bottom: 20px;"></div>
+      <div class="bottom-action" style="position: sticky; bottom: 0; background: #FAF9F6; margin: auto -24px 0 -24px; padding: 20px 24px; border-top: 1px solid #eee; z-index: 10;">
+        <button class="primary-btn" id="backToHomeFromApps" style="background-color: transparent; color: #333; border: 1px solid #333;">חזרה למסך הבית</button>
+      </div>
+    </div>
+
+    <div id="bookingFlow" class="screen-container" style="display: none;">
+      <div id="titleSection"><h1 style="margin-bottom: 20px;">מה הטיפול שלך היום? ✨</h1></div>
+      
+      <div class="treatments-list" id="treatmentsList">
+        <div class="treatment-card" data-duration="60"><div class="info"><h2>לק ג'ל מבנה אנטומי ללא חיזוק</h2><p>⏱️ שעה</p></div><div class="price">120 ₪</div></div>
+        <div class="treatment-card" data-duration="90"><div class="info"><h2>לק ג'ל מבנה אנטומי + קישוט / השלמה</h2><p>⏱️ שעה וחצי</p></div><div class="price"><span style="font-size: 14px; font-weight: normal; color: #777;">החל מ-</span>130 ₪</div></div>
+        <div class="treatment-card" data-duration="70"><div class="info"><h2>חיזוק בג'ל / מילוי בנייה</h2><p>⏱️ שעה ו-10 דק'</p></div><div class="price">140 ₪</div></div>
+        <div class="treatment-card" data-duration="90"><div class="info"><h2>חיזוק / מילוי + השלמה / קישוט</h2><p>⏱️ שעה וחצי</p></div><div class="price"><span style="font-size: 14px; font-weight: normal; color: #777;">החל מ-</span>150 ₪</div></div>
+        <div class="treatment-card" data-duration="120"><div class="info"><h2>בנייה בטיפס הפוך</h2><p>⏱️ שעתיים</p></div><div class="price">300 ₪</div></div>
+        <div class="treatment-card" data-duration="150"><div class="info"><h2>בנייה בטיפס הפוך + קישוט</h2><p>⏱️ שעתיים וחצי</p></div><div class="price"><span style="font-size: 14px; font-weight: normal; color: #777;">החל מ-</span>310 ₪</div></div>
+        <div class="treatment-card" data-duration="30"><div class="info"><h2>מניקור יסודי + הסרה</h2><p>⏱️ חצי שעה</p></div><div class="price">80 ₪</div></div>
+      </div>
+      
+      <div class="bottom-action" id="bottomAction"><button class="primary-btn" id="continueBtn">המשך לבחירת שעה</button></div>
+
+      <div class="datetime-section" id="datetimeSection" style="display: none;">
+        <h2 style="margin-bottom: 20px;">מתי נוח לך? 📅</h2>
+        <div class="calendar-wrapper">
+          <p class="subtitle">בחירי יום פנוי:</p>
+          <div class="days-scroll" id="dynamicDaysList"></div>
+        </div>
+        <div class="time-wrapper" id="timeWrapper" style="margin-top: 20px; display: none;">
+          <p class="subtitle">בחירי שעה:</p>
+          <div class="times-grid" id="dynamicTimesList"></div>
+        </div>
+      </div>
+
+      <div class="bottom-action" id="confirmTimeAction" style="display: none;"><button class="primary-btn" id="confirmTimeBtn">המשך לאישור תקנון</button></div>
+    </div>
+
+    <div class="modal-overlay" id="termsModal">
+      <div class="modal-content">
+        <div class="modal-header"><h2>אישור נהלי הקליניקה</h2><span class="close-modal" id="closeModalBtn">&times;</span></div>
+        <div class="modal-body" style="padding: 0; text-align: center; background-color: #000;"><img src="terms.jpg" alt="תקנון" style="width: 100%;"></div>
+        <div class="modal-footer"><button class="approve-terms-btn" id="approveTermsBtn">קראתי, ואני מאשרת</button></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="cancelModal">
+      <div class="modal-content" style="height: auto; padding: 30px 24px; text-align: center; border-radius: 30px; margin: 0 20px; bottom: 50%; position: absolute; transform: translateY(50%);">
+        <h2 style="margin: 0 0 10px 0; color: #333;">ביטול תור</h2>
+        <p style="color: #777; margin-bottom: 24px;">האם את בטוחה שברצונך לבטל את התור?</p>
+        <div id="cancelAppointmentDetails" style="background: #fdfbf7; padding: 16px; border-radius: 12px; margin-bottom: 24px; border: 1px solid rgba(194,168,120,0.3); text-align: right;"></div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <button class="primary-btn" id="confirmCancelBtn" style="background-color: #dc3545; color: white;">כן, לבטל</button>
+          <button class="primary-btn" id="abortCancelBtn" style="background-color: transparent; color: #333; border: 1px solid #ccc;">לא, התחרטתי</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="summaryScreen" class="screen-container" style="display: none; align-items: center; justify-content: center; text-align: center;">
+      <div class="success-icon" style="font-size: 60px; color: #C2A878; margin-bottom: 20px;">✔️</div>
+      <h2 style="margin-bottom: 10px;">התור שלך נקבע!</h2>
+      <p style="color: #777; margin-bottom: 30px;">איזה כיף, נטלי מחכה לך.</p>
+      <div class="summary-card" id="summaryCardDetails" style="background: #fff; padding: 24px; border-radius: 16px; width: 100%; text-align: right; margin-bottom: 30px; border: 1px solid rgba(194,168,120,0.2);"></div>
+      <button class="primary-btn" id="addToCalendarBtn" style="background-color: transparent; color: #333; border: 2px solid #333; margin-bottom: 15px;">📅 הוספה ליומן שלי</button>
+      <button class="primary-btn" id="backToHomeBtn">חזרה למסך הבית</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  // זיהוי אייפון והצגת באנר ההדרכה
+  const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+  const isStandalone = () => ('standalone' in window.navigator) && (window.navigator.standalone);
+  if (isIos() && !isStandalone()) {
+    document.getElementById('iosInstallPrompt').style.display = 'block';
+  }
+</script>
+</body>
+</html>
