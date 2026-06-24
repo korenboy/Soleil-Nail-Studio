@@ -17,7 +17,3 @@
 * **Database:** Firebase Firestore (NoSQL).
 * **Hosting:** Firebase Hosting.
 
-## 🚀 איך להריץ את הפרויקט מקומית (למפתחים)
-1. שכפל את המאגר:
-   ```bash
-   git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)

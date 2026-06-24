@@ -73,7 +73,17 @@ body {
 .treatment-card.selected { border-color: #C2A878; background-color: #fdfbf7; }
 .treatment-card h2 { margin: 0 0 5px 0; font-size: 16px; color: #333; }
 .treatment-card p { margin: 0; font-size: 14px; color: #777; }
-.treatment-card .price { font-weight: 700; color: #C2A878; font-size: 18px; }
+.treatment-card .price { 
+    font-weight: 700; 
+    color: #C2A878; 
+    font-size: 18px; 
+    display: flex; 
+    align-items: center; 
+    gap: 4px; 
+    white-space: nowrap; 
+    flex-shrink: 0;
+    direction: rtl;
+}
 
 .bottom-action { position: absolute; bottom: 0; left: 0; width: 100%; padding: 24px; background: linear-gradient(to top, #FAF9F6 80%, transparent); }
 

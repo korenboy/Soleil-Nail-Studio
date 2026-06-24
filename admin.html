@@ -194,15 +194,22 @@
                 <div style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
                         <select id="calViewSelector" class="form-input" style="width:auto; padding:6px; margin:0; font-size:14px; font-weight:bold; color:#111; border-color:#C2A878;" onchange="changeCalView(this.value)">
-                            <option value="month">תצוגת חודש</option>
-                            <option value="week">תצוגת שבוע</option>
-                            <option value="day">תצוגת יום (פירוט לו"ז)</option>
-                        </select>
-                        <div style="display:flex; align-items:center; gap:10px; background:#f4f7f6; padding:5px 10px; border-radius:12px;">
-                            <button class="calendar-nav-btn" onclick="changeDate(-1)">&rarr;</button>
-                            <strong id="monthYearLabel" style="font-size:15px; min-width:80px; text-align:center;">טוען...</strong>
-                            <button class="calendar-nav-btn" onclick="changeDate(1)">&larr;</button>
-                        </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; gap:10px;">
+        <select id="calViewSelector" class="form-input" style="width:auto; padding:6px; margin:0; font-size:14px; font-weight:bold; color:#111; border-color:#C2A878;" onchange="changeCalView(this.value)">
+            <option value="month">תצוגת חודש</option>
+            <option value="week">תצוגת שבוע</option>
+            <option value="day">תצוגת יום</option>
+        </select>
+        <button class="btn-action" style="background:#28a745; color:white; font-size:12px; padding:6px 12px; border-radius:8px; border:none;" onclick="openWeeklyTemplateModal()">🕒 משמרות קבועות</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; background:#f4f7f6; padding:5px 10px; border-radius:12px;">
+        <button class="calendar-nav-btn" onclick="changeDate(-1)">&rarr;</button>
+        <button class="calendar-nav-btn" style="background:transparent; color:#111; border:1px solid #111;" onclick="goToToday()">היום</button>
+        <strong id="monthYearLabel" style="font-size:15px; min-width:80px; text-align:center;">טוען...</strong>
+        <button class="calendar-nav-btn" onclick="changeDate(1)">&larr;</button>
+    </div>
+</div>
                     </div>
                     <div class="calendar-grid" id="calendarDayHeaders" style="margin-bottom: 5px;">
                         <div class="calendar-day-header">א'</div><div class="calendar-day-header">ב'</div><div class="calendar-day-header">ג'</div><div class="calendar-day-header">ד'</div><div class="calendar-day-header">ה'</div><div class="calendar-day-header">ו'</div><div class="calendar-day-header">ש'</div>
@@ -386,6 +393,29 @@
         <button class="btn-submit" onclick="document.getElementById('waBroadcastModal').classList.remove('active')">סגירה</button>
     </div>
 </div>
+<div class="modal-overlay" id="weeklyTemplateModal">
+    <div class="modal-box">
+        <h3 style="margin-top:0; text-align:center;">משמרות קבועות 🕒</h3>
+        <p style="font-size:13px; color:#777; text-align:center;">המערכת תפתח עבורך אוטומטית משמרות ל-3 החודשים הקרובים (ימים שכבר פתחת בעבר לא יידרסו ותמיד תוכלי לשנות נקודתית).</p>
+        
+        <strong>ראשון - חמישי:</strong>
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+            <input type="time" id="defMidweekStart" class="form-input" value="08:00">
+            <span style="align-self:center;">-</span>
+            <input type="time" id="defMidweekEnd" class="form-input" value="18:00">
+        </div>
+        
+        <strong>שישי:</strong>
+        <div style="display:flex; gap:10px; margin-bottom:20px;">
+            <input type="time" id="defFridayStart" class="form-input" value="08:00">
+            <span style="align-self:center;">-</span>
+            <input type="time" id="defFridayEnd" class="form-input" value="14:00">
+        </div>
+
+        <button class="btn-submit" onclick="generateWeeklyShifts()">פתיחת יומן 🚀</button>
+        <button style="background:none; border:none; width:100%; color:#777; padding:10px;" onclick="document.getElementById('weeklyTemplateModal').classList.remove('active')">ביטול</button>
+    </div>
+</div>
 
 <script>
     const firebaseConfig = {
@@ -400,7 +430,7 @@
     const db = firebase.firestore();
     const functions = firebase.functions(); // הפעלת חיבור לשרת!!
 
-    if (sessionStorage.getItem('adminLoggedIn') === 'true') {
+    if (localStorage.getItem('adminLoggedIn') === 'true') {
         document.getElementById('adminAuthScreen').style.display = 'none';
         document.getElementById('adminAppWrapper').style.display = 'flex';
         const currentMonthStr = new Date().toISOString().substring(0, 7);
@@ -505,7 +535,7 @@
         try {
             const otpDoc = await db.collection('otps').doc(pendingAdminPhone).get();
             if (otpDoc.exists && otpDoc.data().code === enteredCode) {
-                sessionStorage.setItem('adminLoggedIn', 'true');
+                localStorage.setItem('adminLoggedIn', 'true');
                 
                 document.getElementById('adminAuthScreen').style.display = 'none';
                 document.getElementById('adminAppWrapper').style.display = 'flex';
@@ -562,8 +592,7 @@
     document.addEventListener('DOMContentLoaded', setupAdminOtpJump);
     setTimeout(setupAdminOtpJump, 500);
 
-    window.logoutAdmin = function() { sessionStorage.removeItem('adminLoggedIn'); location.reload(); };
-
+    window.logoutAdmin = function() { localStorage.removeItem('adminLoggedIn'); location.reload(); };
     window.toggleAdminMenu = function() {
         document.getElementById('adminSidebar').classList.toggle('open');
         document.getElementById('adminMenuOverlay').classList.toggle('active');
@@ -957,16 +986,28 @@ window.removeFromWaitlist = function(id) {
             if(dayApps.length === 0) html += `<p style="text-align:center; color:#777; font-size:14px;">אין תורים ליום זה.</p>`;
             else {
                 dayApps.forEach(app => {
-                    html += `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid #eee; background:#fff; border-radius:8px; margin-bottom:8px;">
-                        <div style="flex:1;">
-                            <strong style="color:#C2A878; font-size:15px;">${app.time}</strong> <strong style="font-size:15px; text-decoration:underline; cursor:pointer;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}</strong>
-                            <br><span style="font-size:12px; color:#555;">${app.treatment}</span>
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:5px;">
-                            <button class="btn-edit" style="padding:4px;" onclick="openEditAppModal('${app.id}')">✏️</button>
-                        </div>
-                    </div>`;
-                });
+    let [h, m] = (app.time || "00:00").split(':').map(Number);
+    let dur = parseInt(app.duration || 60);
+    let endMin = h * 60 + m + dur;
+    let endH = String(Math.floor(endMin / 60)).padStart(2, '0');
+    let endM = String(endMin % 60).padStart(2, '0');
+    let endTimeStr = `${endH}:${endM}`;
+    
+    // הגובה נמתח לפי אורך הטיפול
+    let blockHeight = Math.max(70, dur * 1.5); 
+
+    html += `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:15px; border-right:5px solid #C2A878; background:#fff; border-radius:8px; margin-bottom:10px; box-shadow:0 3px 10px rgba(0,0,0,0.04); min-height:${blockHeight}px;">
+        <div style="flex:1;">
+            <strong style="color:#111; font-size:16px;">${app.time} - ${endTimeStr}</strong> 
+            <strong style="font-size:16px; text-decoration:underline; cursor:pointer; color:#007bff; margin-right:10px;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}</strong>
+            <br><span style="font-size:14px; color:#555; display:block; margin-top:8px;">${app.treatment} (${dur} דק')</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="btn-edit" style="padding:6px 12px; font-size:13px;" onclick="openEditAppModal('${app.id}')">✏️ ערוך שעות</button>
+            <button class="btn-block" style="padding:6px 12px; font-size:13px;" onclick="cancelApp('${app.id}')">❌ ביטול תור</button>
+        </div>
+    </div>`;
+});
             }
             html += `</div>`; grid.innerHTML = html;
         } else {
@@ -975,6 +1016,44 @@ window.removeFromWaitlist = function(id) {
         }
     }
     function createCell(y, m, d) { let fullDateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let allApps = JSON.parse(localStorage.getItem('myAppointments')) || []; let shift = adminShifts.find(s => s && s.date === fullDateStr); let dayApps = allApps.filter(a => a && a.status !== 'canceled' && a.fullDate === fullDateStr); let cell = document.createElement('div'); cell.className = `calendar-cell ${shift ? 'has-shift' : ''}`; cell.id = `cal-cell-${fullDateStr}`; cell.innerHTML = `<div class="cell-date">${d}</div><div class="holiday-container"></div>${dayApps.length > 0 ? `<div style="background:#28a745; color:#fff; padding:2px; border-radius:4px; font-size:10px; margin-bottom:2px;">${dayApps.length} תורים</div>` : ''}${shift ? `<div class="shift-badge">${shift.start}</div>` : ''}`; cell.onclick = () => { calViewMode = 'day'; currentCalDate = new Date(y, m, d); document.getElementById('calViewSelector').value = 'day'; renderCalendar(); }; document.getElementById('calendarGrid').appendChild(cell); }
+    window.goToToday = function() { currentCalDate = new Date(); renderCalendar(); };
+    window.openWeeklyTemplateModal = function() { document.getElementById('weeklyTemplateModal').classList.add('active'); };
+    window.generateWeeklyShifts = async function() {
+    const mwStart = document.getElementById('defMidweekStart').value;
+    const mwEnd = document.getElementById('defMidweekEnd').value;
+    const frStart = document.getElementById('defFridayStart').value;
+    const frEnd = document.getElementById('defFridayEnd').value;
+    
+    const btn = document.querySelector('#weeklyTemplateModal .btn-submit');
+    btn.innerText = 'פותח משמרות...'; btn.disabled = true;
+
+    let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || [];
+    const batch = db.batch(); let added = 0;
+    
+    for(let i=0; i<90; i++) {
+        let d = new Date(); d.setDate(d.getDate() + i);
+        let dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        let dayOfWeek = d.getDay();
+        
+        if(adminShifts.find(s => s.date === dateStr)) continue; 
+        
+        let start = null, end = null;
+        if(dayOfWeek >= 0 && dayOfWeek <= 4 && mwStart && mwEnd) { start = mwStart; end = mwEnd; } 
+        else if(dayOfWeek === 5 && frStart && frEnd) { start = frStart; end = frEnd; }
+        
+        if(start && end) {
+            let ref = db.collection('shifts').doc(dateStr);
+            batch.set(ref, { date: dateStr, start: start, end: end, breakStart: "", breakEnd: "" });
+            added++;
+        }
+    }
+    
+    if(added > 0) { await batch.commit(); alert(`נוצרו ${added} ימי עבודה חדשים בהצלחה!`); } 
+    else { alert("היומן כבר פתוח לתקופה זו."); }
+    
+    document.getElementById('weeklyTemplateModal').classList.remove('active');
+    btn.innerText = 'פתיחת יומן 🚀'; btn.disabled = false;
+};
 
     window.openShiftModalFromDay = function() { const year = currentCalDate.getFullYear(); const month = currentCalDate.getMonth(); const date = currentCalDate.getDate(); let fullDateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`; let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let shift = adminShifts.find(s => s && s.date === fullDateStr); openShiftModal(fullDateStr, shift); }
     function openShiftModal(dateStr, existingShift) { document.getElementById('shiftModal').classList.add('active'); const parts = dateStr.split('-'); document.getElementById('shiftModalDate').value = dateStr; const delBtn = document.getElementById('deleteShiftBtn'); if (existingShift) { document.getElementById('shiftStart').value = existingShift.start; document.getElementById('shiftEnd').value = existingShift.end; document.getElementById('shiftBreakStart').value = existingShift.breakStart || ""; document.getElementById('shiftBreakEnd').value = existingShift.breakEnd || ""; delBtn.style.display = 'block'; } else { document.getElementById('shiftStart').value = "09:00"; document.getElementById('shiftEnd').value = "18:00"; document.getElementById('shiftBreakStart').value = ""; document.getElementById('shiftBreakEnd').value = ""; delBtn.style.display = 'none'; } }
@@ -1011,25 +1090,34 @@ window.removeFromWaitlist = function(id) {
     }
     
     window.handleImageUpload = function(event, targetId) {
-    const file = event.target.files[0];
-    if (!file) return;
+    const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = function(e) {
-        document.getElementById(targetId).value = e.target.result;
+        const img = new Image(); img.src = e.target.result;
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800; // דחיסה כדי שהענן יקבל את זה מהר ובלי שגיאות
+            const scaleSize = MAX_WIDTH / img.width;
+            canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
+            const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const base64Str = canvas.toDataURL('image/jpeg', 0.8);
+            
+            document.getElementById(targetId).value = base64Str;
+            const preview = document.getElementById(targetId + '_preview');
+            if(preview) { preview.src = base64Str; preview.style.display = 'inline-block'; }
+            saveClientAppConfig(true); // שמירה אוטומטית בלי קפיצת פופ-אפ מציק
+        }
     };
     reader.readAsDataURL(file);
 };
-
-window.saveClientAppConfig = function() {
+window.saveClientAppConfig = function(silent = false) {
     const msg = document.getElementById('confMsg').value;
     const img1 = document.getElementById('confImg1Base64').value;
     const img2 = document.getElementById('confImg2Base64').value;
     const img3 = document.getElementById('confImg3Base64').value;
 
-    db.collection('settings').doc('homeConfig').set({
-        msg: msg, img1: img1, img2: img2, img3: img3
-    }, { merge: true }).then(() => {
-        alert("הגדרות ועיצוב נשמרו בהצלחה! יתעדכן אצל כל הלקוחות.");
+    db.collection('settings').doc('homeConfig').set({ msg: msg, img1: img1, img2: img2, img3: img3 }, { merge: true }).then(() => {
+        if(silent !== true) alert("הגדרות ועיצוב נשמרו בהצלחה! יתעדכן אצל כל הלקוחות.");
     });
 };
 
@@ -1192,18 +1280,18 @@ window.saveClientAppConfig = function() {
 
     // === מעקף כפתור תזכורת SMS (מחליף את הפונקציה הקיימת) ===
     window.sendManualSmsReminder = async function(id) {
-        const app = (JSON.parse(localStorage.getItem('myAppointments')) || []).find(a => String(a.id) === String(id));
-        if(!app) return;
-        try {
-            // ---- מעקף לשרת לבדיקות ----
-            await db.collection("appointments").doc(id.toString()).update({reminderSmsSent: true});
-            alert("התזכורת סומנה כנשלחה בהצלחה! (סימולציה)");
-            loadAppointmentsData(); // רענון המסך
-        } catch(e) {
-            alert("שגיאה בשמירת הסטטוס");
-        }
-    };
+    const app = (JSON.parse(localStorage.getItem('myAppointments')) || []).find(a => String(a.id) === String(id));
+    if(!app) return;
+    if(!confirm(`לשלוח תזכורת SMS ל-${app.clientName}?`)) return;
 
+    try {
+        const sendReminderSms = functions.httpsCallable('sendReminderSms');
+        await sendReminderSms({ phone: app.clientPhone, clientName: app.clientName, date: app.date, time: app.time });
+        await db.collection("appointments").doc(id.toString()).update({reminderSmsSent: true});
+        alert("✅ תזכורת SMS נשלחה בהצלחה!");
+        loadAppointmentsData();
+    } catch(e) { console.error(e); alert("❌ שגיאה בשליחה, ודאי שהמערכת מחוברת."); }
+};
     // === פתיחת/סגירת חלונית (מתוקן הבאג!) ===
     window.toggleNotifications = function() {
         if (window.event) window.event.stopPropagation(); // מגן שמונע סגירה מיידית
