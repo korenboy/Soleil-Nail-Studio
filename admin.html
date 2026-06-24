@@ -651,10 +651,10 @@ window.closeManualBookModal = function() {
     document.getElementById('manualBookModal').classList.remove('active');
 };
 
-    function loadAllAdminData() {
-        if(sessionStorage.getItem('adminLoggedIn') !== 'true') return;
+    window.loadAllAdminData = function() {
+        // הנה התיקון הקריטי! עכשיו זה בודק את ה-localStorage הנכון
+        if(localStorage.getItem('adminLoggedIn') !== 'true') return;
         
-        // --- קוד הברכה המשתנה ---
         const hour = new Date().getHours();
         let greeting = "שלום";
         if (hour >= 5 && hour < 12) greeting = "בוקר טוב";
@@ -662,12 +662,29 @@ window.closeManualBookModal = function() {
         else if (hour >= 18 && hour < 22) greeting = "ערב טוב";
         else greeting = "לילה טוב";
         document.getElementById('adminGreetingMsg').innerText = `${greeting}, נטלי! 🤍`;
-        // ------------------------
-        let totalArrived = 0, totalCancelClient = 0, totalCancelAdmin = 0; const todayStr = new Date().toISOString().split('T')[0]; const currentMonthStr = todayStr.substring(0, 7); let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
-        allApps.forEach(app => { if (app && app.fullDate && app.fullDate.startsWith(currentMonthStr)) { if (app.status === 'approved' && app.fullDate < todayStr) { totalArrived++; } else if (app.status === 'canceled') { if (app.cancelSource === 'client' || (app.statusText && (app.statusText.includes('ידך') || app.statusText.includes('לקוחה')))) { totalCancelClient++; } else { totalCancelAdmin++; } } } });
-        document.getElementById('dashArrived').innerText = totalArrived; document.getElementById('dashCancels').innerText = `${totalCancelClient} / ${totalCancelAdmin}`;
-        loadTodaySchedule(); loadAppointmentsData(); renderCalendar();
-    }
+        
+        let totalArrived = 0, totalCancelClient = 0, totalCancelAdmin = 0; 
+        const todayStr = new Date().toISOString().split('T')[0]; 
+        const currentMonthStr = todayStr.substring(0, 7); 
+        let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
+        
+        allApps.forEach(app => { 
+            if (app && app.fullDate && app.fullDate.startsWith(currentMonthStr)) { 
+                if (app.status === 'approved' && app.fullDate < todayStr) { totalArrived++; } 
+                else if (app.status === 'canceled') { 
+                    if (app.cancelSource === 'client' || (app.statusText && (app.statusText.includes('ידך') || app.statusText.includes('לקוחה')))) { totalCancelClient++; } 
+                    else { totalCancelAdmin++; } 
+                } 
+            } 
+        });
+        document.getElementById('dashArrived').innerText = totalArrived; 
+        document.getElementById('dashCancels').innerText = `${totalCancelClient} / ${totalCancelAdmin}`;
+        
+        loadTodaySchedule(); 
+        loadAppointmentsData(); 
+        renderCalendar();
+        if(typeof loadFinanceData === 'function') loadFinanceData();
+    };
 
     // ==========================================
     // מערכת ניהול טיפולים (חדש)
@@ -1085,7 +1102,7 @@ window.removeFromWaitlist = function(id) {
     // (שאר הפונקציות: קביעה ידנית, פיננסים, חסימות משתמש - נשמרו לחלוטין ללא שינוי, השמטתי אותן כאן מהצגה כדי לחסוך מקום, אבל כולן מחוברות ועובדות בדיוק כפי שהיו בקובץ הקודם).
     window.approveApp = function(id) { db.collection("appointments").doc(id.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}); };
     window.cancelApp = function(id) { if(confirm('לבטל את התור?')) { db.collection("appointments").doc(id.toString()).update({status: 'canceled', statusText: 'בוטל ע"י הקליניקה ❌', cancelSource: 'admin'}); } };
-    function loadTodaySchedule() {
+    window.loadTodaySchedule = function() {
         const scheduleList = document.getElementById('todayScheduleList');
         if(!scheduleList) return;
         scheduleList.innerHTML = '';
@@ -1093,15 +1110,14 @@ window.removeFromWaitlist = function(id) {
         const todayStr = `${String(new Date().getDate()).padStart(2, '0')}.${String(new Date().getMonth() + 1).padStart(2, '0')}`;
         let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
         
-        // השורה הזו הייתה חסרה/פגומה:
-        const todayAppointments = allApps.filter(app => app && app.status !== 'canceled' && app.date && app.date.includes(todayStr)).sort((a,b) => a.time.localeCompare(b.time));
+        const todayAppointments = allApps.filter(app => app && app.status !== 'canceled' && app.date && app.date.includes(todayStr)).sort((a,b) => (a.time||"").localeCompare(b.time||""));
 
         if (todayAppointments.length === 0) {
             scheduleList.innerHTML = `
             <div style="text-align: center; padding: 30px 15px; background: #fdfbf7; border-radius: 16px; border: 1px dashed #C2A878; margin-top: 10px;">
                 <div style="font-size: 45px; margin-bottom: 15px;">☕</div>
                 <h3 style="margin: 0; color: #111; font-size: 18px;">איזה כיף, יום חופש!</h3>
-                <p style="color: #777; margin: 5px 0 0 0; font-size: 14px;">אין לך תורים להיום. זמן מושלם לנוח ולצבור כוחות לימים הבאים.</p>
+                <p style="color: #777; margin: 5px 0 0 0; font-size: 14px;">אין לך תורים להיום. זמן מושלם לנוח ולצבור כוחות.</p>
             </div>`;
             return;
         }
@@ -1109,7 +1125,7 @@ window.removeFromWaitlist = function(id) {
         todayAppointments.forEach(app => {
             scheduleList.innerHTML += `<div class="schedule-card"><div class="time-box">${app.time}</div><div style="flex:1; margin-right:10px;"><strong>${app.clientName}</strong><br><span style="font-size:12px; color:#777;">${app.treatment}</span></div></div>`;
         });
-    }
+    };
     
     window.handleImageUpload = function(event, targetId) {
     const file = event.target.files[0]; if (!file) return;
@@ -1449,6 +1465,86 @@ window.saveClientAppConfig = function(silent = false) {
         }
     };
 
+window.saveFinanceRecord = function() {
+        const type = document.getElementById('finType').value;
+        const amount = document.getElementById('finAmount').value;
+        const desc = document.getElementById('finDesc').value;
+        const date = document.getElementById('finDate').value;
+        
+        if(!amount || !desc || !date) { alert("יש למלא את כל השדות!"); return; }
+        
+        const btn = document.getElementById('finSaveBtn');
+        btn.innerText = 'שומר...'; btn.disabled = true;
+
+        const recordId = Date.now().toString();
+        const monthStr = date.substring(0, 7);
+        
+        db.collection('finance').doc(recordId).set({
+            id: recordId, type: type, amount: parseInt(amount), desc: desc, date: date, month: monthStr, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => {
+            alert("תנועה נשמרה בהצלחה! 💰");
+            document.getElementById('finAmount').value = '';
+            document.getElementById('finDesc').value = '';
+            document.getElementById('finDate').value = '';
+            loadFinanceData();
+        }).catch(err => {
+            alert("שגיאה בשמירה!");
+        }).finally(() => {
+            btn.innerText = 'שמירה'; btn.disabled = false;
+        });
+    };
+
+    window.loadFinanceData = function() {
+        const month = document.getElementById('finMonthSelect').value;
+        if(!month) return;
+        
+        const list = document.getElementById('finHistoryList');
+        if(!list) return;
+        list.innerHTML = 'טוען...';
+        
+        db.collection('finance').where('month', '==', month).get().then(snap => {
+            let totalIncome = 0; let totalExpense = 0;
+            list.innerHTML = '';
+            
+            if(snap.empty) {
+                list.innerHTML = '<p style="text-align:center; color:#777;">אין תנועות לחודש זה.</p>';
+            }
+            
+            let records = [];
+            snap.forEach(doc => records.push(doc.data()));
+            records.sort((a,b) => b.date.localeCompare(a.date));
+            
+            records.forEach(r => {
+                if(r.type === 'income') totalIncome += r.amount; else totalExpense += r.amount;
+                let color = r.type === 'income' ? '#28a745' : '#dc3545';
+                let sign = r.type === 'income' ? '+' : '-';
+                
+                list.innerHTML += `
+                <div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; align-items:center;">
+                    <div style="flex:1;"><strong>${r.desc}</strong><br><span style="font-size:12px; color:#777;">${r.date.split('-').reverse().join('.')}</span></div>
+                    <div style="color:${color}; font-weight:bold; direction:ltr; margin-left: 10px;">${sign} ₪${r.amount}</div>
+                    <button style="background:none; border:none; color:#dc3545; font-size:16px; cursor:pointer; padding:5px;" onclick="deleteFinanceRecord('${r.id}')">🗑️</button>
+                </div>`;
+            });
+            
+            const incomeEl = document.getElementById('finIncomeStat');
+            const expenseEl = document.getElementById('finExpenseStat');
+            if(incomeEl) incomeEl.innerText = '₪ ' + totalIncome;
+            if(expenseEl) expenseEl.innerText = '₪ ' + totalExpense;
+            
+            let profit = totalIncome - totalExpense;
+            let dashProfit = document.getElementById('dashStatProfit');
+            if(dashProfit) dashProfit.innerText = '₪ ' + profit;
+            let dashIncome = document.getElementById('dashStatIncome');
+            if(dashIncome) dashIncome.innerText = '₪ ' + totalIncome;
+        });
+    };
+
+    window.deleteFinanceRecord = function(id) {
+        if(confirm("האם למחוק תנועה זו?")) {
+            db.collection('finance').doc(id).delete().then(() => loadFinanceData());
+        }
+    };
 </script>
 </body>
 </html>
