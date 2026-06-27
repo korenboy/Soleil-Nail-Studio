@@ -117,10 +117,12 @@
     <div id="adminAppWrapper" style="display: none; height: 100%; flex-direction: column;">
         
         <header class="admin-header">
+            <header class="admin-header">
             <div onclick="toggleAdminMenu()" style="font-size: 24px; cursor: pointer;">☰</div>
             <div style="font-size: 18px; font-weight: bold;">ניהול קליניקה</div>
             <div style="display: flex; gap: 15px; align-items: center;">
-                <span onclick="loadAllAdminData()" style="font-size: 20px; cursor: pointer;">🔄</span>
+                <!-- תוקן כפתור הרענון שייאלץ טעינה מחדש גם ב-PWA -->
+                <span onclick="forceRefreshApp()" style="font-size: 20px; cursor: pointer;">🔄</span>
                 <div style="position: relative;" onclick="toggleNotifications()">
                     <span style="font-size: 20px; cursor: pointer;">🔔</span>
                     <div class="notif-badge" id="notifBadge">0</div>
@@ -606,21 +608,35 @@
     setTimeout(setupAdminOtpJump, 500);
 
     window.logoutAdmin = function() { localStorage.removeItem('adminLoggedIn'); location.reload(); };
+    window.forceRefreshApp = function() { window.location.reload(true); };
+
     window.toggleAdminMenu = function() {
         document.getElementById('adminSidebar').classList.toggle('open');
         document.getElementById('adminMenuOverlay').classList.toggle('active');
     };
 
+    // תוקן ניווט התפריט: עכשיו בכל לחיצה הוא מרנדר את המסך מחדש כדי למנוע מסכים ריקים!
     document.querySelectorAll('.nav-item[data-target]').forEach(item => {
         item.addEventListener('click', () => {
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             document.querySelectorAll('.admin-screen').forEach(s => s.classList.remove('active'));
             item.classList.add('active');
-            document.getElementById(item.getAttribute('data-target')).classList.add('active');
+            
+            const targetId = item.getAttribute('data-target');
+            document.getElementById(targetId).classList.add('active');
             document.getElementById('adminSidebar').classList.remove('open');
             document.getElementById('adminMenuOverlay').classList.remove('active');
+            
+            // ציור מחדש של הנתונים כדי למנוע מסך ריק בחזרה מהרקע
+            if(targetId === 'dashboardScreen') loadTodaySchedule();
+            if(targetId === 'calendarManagerScreen') renderCalendar();
+            if(targetId === 'treatmentsScreen') renderTreatmentsAdmin();
+            if(targetId === 'appointmentsScreen') { loadAppointmentsData(); renderWaitlistAdmin(); }
+            if(targetId === 'clientsScreen') renderUsers();
+            if(targetId === 'financeScreen') loadFinanceData();
         });
     });
+
 
     function initAdminListeners() {
         db.collection('shifts').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminShifts', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });

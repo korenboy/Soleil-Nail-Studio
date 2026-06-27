@@ -1,5 +1,5 @@
 const { onCall } = require('firebase-functions/v2/https');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 const axios = require('axios');
@@ -150,3 +150,64 @@ exports.dailySmsReminders = onSchedule({
         console.error("Error in dailySmsReminders:", error);
     }
 });
+// ============================================================================
+// אוטומציה: התראת טלגרם למנהלת + שליחת SMS אוטומטי לרשימת המתנה בעת ביטול תור
+// ============================================================================
+exports.onAppointmentCanceled = onDocumentUpdated('appointments/{appId}', async (event) => {
+        const before = event.data.before.data();
+        const after = event.data.after.data();
+
+        // בודק אם הסטטוס השתנה עכשיו ל-"canceled" (בוטל)
+        if (before.status !== 'canceled' && after.status === 'canceled') {
+            const date = after.date; // לדוגמה: "24.06"
+            const fullDate = after.fullDate; // לדוגמה: "2026-06-24"
+            const time = after.time;
+            const clientName = after.clientName;
+
+            console.log(`Appointment canceled by ${clientName} on ${date} at ${time}. Starting automation...`);
+
+            // 1. שליחת התראה לנטלי בטלגרם
+            const telegramMsg = `❌ ביטול תור:\nהלקוחה ${clientName} הרגע ביטלה את התור שלה בתאריך ${date} בשעה ${time}.\nהמערכת בודקת כעת את רשימת ההמתנה.`;
+            
+            try {
+                // מניח שיש לך פונקציה כזו ב-index.js, אם קראת לה בשם אחר, שנה כאן
+                await sendTelegramMessage(telegramMsg); 
+            } catch (err) {
+                console.error("Failed to send Telegram cancel alert", err);
+            }
+
+            // 2. חיפוש בנות ברשימת ההמתנה של אותו תאריך
+            try {
+                const waitlistSnapshot = await admin.firestore().collection('waitlist').where('fullDate', '==', fullDate).get();
+                
+                if (!waitlistSnapshot.empty) {
+                    const phonesToAlert = [];
+                    waitlistSnapshot.forEach(doc => {
+                        let phone = doc.data().clientPhone;
+                        if (phone) phonesToAlert.push(phone);
+                    });
+
+                    // 3. שליחת SMS לבנות הממתינות
+                    if (phonesToAlert.length > 0) {
+                        const smsMsg = `היי! התפנה תור מפתיע בקליניקה בתאריך ${date} בשעה ${time}. מהרי לתפוס אותו באפליקציה לפני שייתפס: https://nails-by-natali.web.app`;
+                        
+                        // קריאה לפונקציית ה-SMS עבור כל לקוחה ברשימה
+                        for (const phone of phonesToAlert) {
+                            await sendPulseemSMS(phone, smsMsg);
+                        }
+                        
+                        console.log(`Waitlist SMS sent to ${phonesToAlert.length} clients.`);
+                        
+                        // עדכון נוסף לנטלי ש-SMS נשלח
+                        await sendTelegramMessage(`✅ הודעת SMS נשלחה אוטומטית ל-${phonesToAlert.length} בנות מרשימת ההמתנה!`);
+                    }
+                } else {
+                    console.log("No one on the waitlist for this date.");
+                }
+            } catch (err) {
+                console.error("Failed to process waitlist automation", err);
+            }
+        }
+        
+        return null;
+    });
