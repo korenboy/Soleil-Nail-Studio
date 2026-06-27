@@ -114,14 +114,13 @@
     </div>
 
     <!-- האפליקציה של האדמין -->
+    <!-- כאן תיקנתי את ה-height בחזרה ל-100% במקום 100vh -->
     <div id="adminAppWrapper" style="display: none; height: 100%; flex-direction: column;">
         
         <header class="admin-header">
-            <header class="admin-header">
             <div onclick="toggleAdminMenu()" style="font-size: 24px; cursor: pointer;">☰</div>
             <div style="font-size: 18px; font-weight: bold;">ניהול קליניקה</div>
             <div style="display: flex; gap: 15px; align-items: center;">
-                <!-- תוקן כפתור הרענון שייאלץ טעינה מחדש גם ב-PWA -->
                 <span onclick="forceRefreshApp()" style="font-size: 20px; cursor: pointer;">🔄</span>
                 <div style="position: relative;" onclick="toggleNotifications()">
                     <span style="font-size: 20px; cursor: pointer;">🔔</span>
