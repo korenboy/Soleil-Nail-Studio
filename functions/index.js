@@ -8,7 +8,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // הגדרות טלגרם
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_TOKEN; 
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; 
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID; 
 const ADMIN_APP_URL = "https://nails-by-natali.web.app/admin.html";
 
