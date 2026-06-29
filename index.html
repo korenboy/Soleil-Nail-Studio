@@ -196,6 +196,30 @@
   if (isIos() && !isStandalone()) {
     document.getElementById('iosInstallPrompt').style.display = 'block';
   }
+
+   // === קוד חדש: אישור הגעה אוטומטי מקישור SMS ===
+  document.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const action = urlParams.get('action');
+      const actionAppId = urlParams.get('id');
+
+      if (action === 'confirm_arrival' && actionAppId) {
+          db.collection("appointments").doc(actionAppId).update({
+              clientConfirmed: true,
+              statusText: "אישרה הגעה ✅"
+          }).then(() => {
+              alert("איזה כיף, אישרת את הגעתך! נטלי מחכה לך בקליניקה 🤍");
+              // מנקה את הלינק כדי שלא יקפוץ שוב ברענון
+              window.history.replaceState(null, null, window.location.pathname);
+              // אם המשתמש כבר מחובר בסלולר שלו, נציג לו את התורים שלו בתוך האפליקציה מיד
+              if (localStorage.getItem('currentUser')) {
+                  setTimeout(() => {
+                      document.getElementById('goToMyAppointments').click();
+                  }, 500);
+              }
+          }).catch(err => console.error("Error auto-confirming:", err));
+      }
+  });
 </script>
 </body>
 </html>

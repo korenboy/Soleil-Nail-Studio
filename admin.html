@@ -970,13 +970,15 @@ window.removeFromWaitlist = function(id) {
     window.sendManualSmsReminder = async function(id) {
         const app = (JSON.parse(localStorage.getItem('myAppointments')) || []).find(a => String(a.id) === String(id));
         if(!app) return;
+        if(!confirm(`לשלוח תזכורת SMS ל-${app.clientName}?`)) return;
         try {
             const sendReminderSms = functions.httpsCallable('sendReminderSms');
-            await sendReminderSms({ phone: app.clientPhone, clientName: app.clientName, date: app.date, time: app.time });
+            await sendReminderSms({ phone: app.clientPhone, clientName: app.clientName, date: app.date, time: app.time, id: app.id });
             db.collection("appointments").doc(id.toString()).update({reminderSmsSent: true});
             alert("תזכורת SMS נשלחה בהצלחה ללקוחה.");
+            loadAppointmentsData();
         } catch(e) {
-            alert("שגיאה בשליחת תזכורת");
+            console.error(e); alert("❌ שגיאה בשליחה, ודאי שהמערכת מחוברת."); 
         }
     };
 

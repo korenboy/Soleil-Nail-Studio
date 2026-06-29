@@ -97,8 +97,10 @@ exports.sendBroadcastSms = onCall({ cors: true, invoker: "public" }, async (requ
 });
 
 exports.sendReminderSms = onCall({ cors: true, invoker: "public" }, async (request) => {
-    const { phone, clientName, date, time } = request.data;
-    await sendPulseemSMS(phone, `היי ${clientName}, תזכורת לתור ב-Soleil ב-${date} בשעה ${time} ✨`);
+    const { phone, clientName, date, time, id} = request.data;
+    const address = process.env.CLINIC_ADDRESS || "";
+    const confirmLink = `https://nails-by-natali.web.app/?action=confirm_arrival&id=${id}`;
+    await sendPulseemSMS(phone, `היי ${clientName}, תזכורת לתור ב-Soleil ב-${date} בשעה ${time} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`);
     return { success: true };
 });
 
@@ -123,7 +125,7 @@ exports.onNewUser = onDocumentCreated('users/{phone}', async (event) => {
 // ====== שעון מעורר לתזכורות אוטומטיות ======
 
 exports.dailySmsReminders = onSchedule({
-    schedule: 'every day 10:00',
+    schedule: 'every day 20:00',
     timeZone: 'Asia/Jerusalem'
 }, async (event) => {
     try {
@@ -131,6 +133,7 @@ exports.dailySmsReminders = onSchedule({
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = formatter.format(tomorrow); 
+        const address = process.env.CLINIC_ADDRESS || "";
 
         const snapshot = await db.collection('appointments')
             .where('fullDate', '==', tomorrowStr)
@@ -142,7 +145,8 @@ exports.dailySmsReminders = onSchedule({
 
         for (const doc of snapshot.docs) {
             const app = doc.data();
-            const msg = `היי ${app.clientName}, תזכורת לתור ב-Soleil מחר (${app.date}) בשעה ${app.time} ✨`;
+            const confirmLink = `https://nails-by-natali.web.app/?action=confirm_arrival&id=${doc.id}`;
+            const msg = `היי ${app.clientName}, תזכורת לתור ב-Soleil מחר (${app.date}) בשעה ${app.time} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`;
             const success = await sendPulseemSMS(app.clientPhone, msg);
             if (success) await doc.ref.update({ reminderSmsSent: true });
         }
