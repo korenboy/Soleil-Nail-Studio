@@ -189,7 +189,15 @@ function listenToCurrentUser(phone) {
                 applyHomeConfig(syncedUser.name);
                 if(mainHeader) mainHeader.style.display = 'flex';
                 if(document.getElementById('pendingApprovalScreen')?.style.display !== 'none' || document.getElementById('loginScreen')?.style.display !== 'none') {
-                   showScreen(homeScreen);
+                    
+                    // הניתוב החכם למסך תורים
+                    if(sessionStorage.getItem('redirectAfterLogin') === 'myAppointments') {
+                        sessionStorage.removeItem('redirectAfterLogin');
+                        renderMyAppointments();
+                        showScreen(myAppointmentsScreen);
+                    } else {
+                        showScreen(homeScreen);
+                    }
                 }
             } else if (syncedUser.status === 'pending') {
                 if(mainHeader) mainHeader.style.display = 'none';
@@ -429,12 +437,27 @@ function renderBookingTimes(shift, dateFormatted) {
     const allApps = JSON.parse(localStorage.getItem('myAppointments')) || []; const bookedApps = allApps.filter(a => a && a.status !== 'canceled' && a.date === dateFormatted);
     let hasSlots = false; let treatmentDuration = window.selectedTreatmentDuration || 60;
     
+    // --- חישוב זמן נוכחי מדויק במכשיר המשתמש ---
+    const now = new Date();
+    const localYear = now.getFullYear();
+    const localMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const localDay = String(now.getDate()).padStart(2, '0');
+    const localTodayStr = `${localYear}-${localMonth}-${localDay}`;
+    
+    const isToday = (shift.date === localTodayStr);
+    
+    // הוספת באפר: חוסמים שעות קרובות (פחות מ-30 דקות מעכשיו) כדי שלא יקבעו תור לעוד שנייה
+    const currentMinutesWithBuffer = (now.getHours() * 60) + now.getMinutes() + 30;
+
     while(curr + treatmentDuration <= end) {
         let slotStart = curr; let slotEnd = curr + treatmentDuration; let timeStr = `${String(Math.floor(curr/60)).padStart(2,'0')}:${String(curr%60).padStart(2,'0')}`;
         let overlapsBreak = (bs !== -1 && isOverlapping(slotStart, slotEnd, bs, be));
         let overlapsBooked = bookedApps.some(a => { let aStart = timeToMinutes(a.time); let aDuration = parseInt(a.duration || 60); let aEnd = aStart + aDuration; return isOverlapping(slotStart, slotEnd, aStart, aEnd); });
         
-        if(!overlapsBreak && !overlapsBooked) { 
+        // הבדיקה שמסננת את שעות העבר
+        let isPastTime = isToday && (slotStart <= currentMinutesWithBuffer);
+
+        if(!overlapsBreak && !overlapsBooked && !isPastTime) { 
             hasSlots = true; 
             let btn = document.createElement('div'); btn.className = 'time-btn'; btn.innerText = timeStr; 
             btn.onclick = () => { document.querySelectorAll('.time-btn').forEach(el => el.classList.remove('selected')); btn.classList.add('selected'); document.getElementById('confirmTimeAction').style.display = 'block'; }; 
@@ -443,7 +466,6 @@ function renderBookingTimes(shift, dateFormatted) {
         curr += 30; 
     }
     
-    // במידה ואין תורים - הצגת רשימת המתנה!
     if(!hasSlots) {
         timesList.innerHTML = `
         <div style="grid-column: 1/-1; text-align:center; padding: 20px; background: #fff3cd; border: 1px dashed #856404; border-radius: 16px;">
@@ -459,6 +481,7 @@ function renderBookingTimes(shift, dateFormatted) {
         </div>`;
     }
 }
+
 
 // הפונקציה ששומרת את הבקשה בענן
 window.joinWaitlist = function(fullDate, displayDate) {

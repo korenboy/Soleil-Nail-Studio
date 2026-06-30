@@ -190,34 +190,56 @@
 
 <script src="app.js"></script>
 <script>
-  // זיהוי אייפון והצגת באנר ההדרכה
-  const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-  const isStandalone = () => ('standalone' in window.navigator) && (window.navigator.standalone);
-  if (isIos() && !isStandalone()) {
-    document.getElementById('iosInstallPrompt').style.display = 'block';
-  }
-
-   // === קוד חדש: אישור הגעה אוטומטי מקישור SMS ===
   document.addEventListener("DOMContentLoaded", () => {
+      // 1. הגנה מפני קריסות - זיהוי אייפון והצגת באנר
+      try {
+          const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+          const isStandalone = () => ('standalone' in window.navigator) && (window.navigator.standalone);
+          if (isIos() && !isStandalone()) {
+              const promptEl = document.getElementById('iosInstallPrompt');
+              if (promptEl) promptEl.style.display = 'block';
+          }
+      } catch(e) { console.error("Banner check failed", e); }
+
+      // 2. קריאת הקישור ופעולות ניתוב חכמות
       const urlParams = new URLSearchParams(window.location.search);
       const action = urlParams.get('action');
       const actionAppId = urlParams.get('id');
 
+      // מצב א': הגעה מהתזכורת האוטומטית - צפייה בלבד
+      if (action === 'view_appointments') {
+          sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
+          window.history.replaceState(null, null, window.location.pathname);
+          
+          if (localStorage.getItem('currentUser')) {
+              setTimeout(() => {
+                  if(document.getElementById('goToMyAppointments')) {
+                      document.getElementById('goToMyAppointments').click();
+                      sessionStorage.removeItem('redirectAfterLogin');
+                  }
+              }, 500);
+          }
+      }
+
+      // מצב ב': הגעה מהתזכורת הידנית - אישור אוטומטי ומעבר למסך
       if (action === 'confirm_arrival' && actionAppId) {
-          db.collection("appointments").doc(actionAppId).update({
+          sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
+          window.history.replaceState(null, null, window.location.pathname);
+
+          // אישור מול פיירבייס בצורה בטוחה ומהירה
+          firebase.firestore().collection("appointments").doc(actionAppId.toString()).update({
               clientConfirmed: true,
               statusText: "אישרה הגעה ✅"
           }).then(() => {
               alert("איזה כיף, אישרת את הגעתך! נטלי מחכה לך בקליניקה 🤍");
-              // מנקה את הלינק כדי שלא יקפוץ שוב ברענון
-              window.history.replaceState(null, null, window.location.pathname);
-              // אם המשתמש כבר מחובר בסלולר שלו, נציג לו את התורים שלו בתוך האפליקציה מיד
-              if (localStorage.getItem('currentUser')) {
-                  setTimeout(() => {
-                      document.getElementById('goToMyAppointments').click();
-                  }, 500);
+              
+              if (localStorage.getItem('currentUser') && document.getElementById('goToMyAppointments')) {
+                  document.getElementById('goToMyAppointments').click();
+                  sessionStorage.removeItem('redirectAfterLogin');
               }
-          }).catch(err => console.error("Error auto-confirming:", err));
+          }).catch(err => {
+              console.error("Error auto-confirming:", err);
+          });
       }
   });
 </script>

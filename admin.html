@@ -910,8 +910,8 @@ window.closeManualBookModal = function() {
         allApps.slice().reverse().forEach(app => {
             if(!app) return; let isPast = false; if(app.fullDate && app.fullDate < todayStr) isPast = true; else if (app.fullDate === todayStr) { const [h, m] = (app.time || "00:00").split(':').map(Number); if ((h * 60 + m) < currentMinutes) isPast = true; }
             let confirmedText = app.clientConfirmed ? `<span style="color:#28a745; font-size:12px;">✅ אישרה</span>` : '';
-            
-            let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${app.treatment} ${confirmedText}</div>`;
+            let reminderStatus = app.reminderSmsSent ? '<span style="font-size: 13px; color: #28a745; background: #e8f5e9; padding: 2px 8px; border-radius: 10px; margin-right: 8px;">✉️ תזכורת נשלחה</span>' : '';
+            let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${app.treatment} ${confirmedText}</div>`;
             
             if (app.status === 'pending') {
                 pendingList.innerHTML += html + `<div style="display:flex; gap:5px;"><button class="btn-approve" onclick="approveApp('${app.id}')">אשרי תור</button><button class="btn-edit" onclick="openEditAppModal('${app.id}')">✏️</button><button class="btn-block" onclick="cancelApp('${app.id}')">ביטול</button></div></div>`;
@@ -1488,27 +1488,67 @@ window.saveFinanceRecord = function() {
         const desc = document.getElementById('finDesc').value;
         const date = document.getElementById('finDate').value;
         
+        // בודקים אם אנחנו במצב "עריכה" או "הוספה חדשה"
+        const editId = document.getElementById('finFormTitle').getAttribute('data-edit-id');
+        
         if(!amount || !desc || !date) { alert("יש למלא את כל השדות!"); return; }
         
         const btn = document.getElementById('finSaveBtn');
         btn.innerText = 'שומר...'; btn.disabled = true;
 
-        const recordId = Date.now().toString();
+        const recordId = editId ? editId : Date.now().toString();
         const monthStr = date.substring(0, 7);
         
         db.collection('finance').doc(recordId).set({
-            id: recordId, type: type, amount: parseInt(amount), desc: desc, date: date, month: monthStr, timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(() => {
-            alert("תנועה נשמרה בהצלחה! 💰");
-            document.getElementById('finAmount').value = '';
-            document.getElementById('finDesc').value = '';
-            document.getElementById('finDate').value = '';
+            id: recordId, 
+            type: type, 
+            amount: parseInt(amount), 
+            desc: desc, 
+            date: date, 
+            month: monthStr, 
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).then(() => {
+            alert(editId ? "התנועה עודכנה בהצלחה! 💰" : "תנועה נשמרה בהצלחה! 💰");
+            cancelFinanceEdit(); // מנקה את הטופס ומחזיר למצב הוספה
             loadFinanceData();
         }).catch(err => {
             alert("שגיאה בשמירה!");
         }).finally(() => {
-            btn.innerText = 'שמירה'; btn.disabled = false;
+            btn.disabled = false;
         });
+    };
+
+    window.editFinanceRecord = function(id) {
+        // מושכים את פרטי התנועה מהענן
+        db.collection('finance').doc(id).get().then(doc => {
+            if(doc.exists) {
+                const r = doc.data();
+                document.getElementById('finType').value = r.type;
+                document.getElementById('finAmount').value = r.amount;
+                document.getElementById('finDesc').value = r.desc;
+                document.getElementById('finDate').value = r.date;
+                
+                // משנים את הטופס למצב עריכה
+                document.getElementById('finFormTitle').innerText = 'עריכת תנועה ✏️';
+                document.getElementById('finFormTitle').setAttribute('data-edit-id', id);
+                document.getElementById('finSaveBtn').innerText = 'שמור שינויים';
+                document.getElementById('finCancelEditBtn').style.display = 'block';
+                
+                // קופצים למעלה חזרה לטופס
+                document.getElementById('financeScreen').scrollTop = 0;
+            }
+        });
+    };
+
+    window.cancelFinanceEdit = function() {
+        document.getElementById('finFormTitle').innerText = 'הוספת תנועה';
+        document.getElementById('finFormTitle').removeAttribute('data-edit-id');
+        document.getElementById('finType').value = 'income';
+        document.getElementById('finAmount').value = '';
+        document.getElementById('finDesc').value = '';
+        document.getElementById('finDate').value = '';
+        document.getElementById('finSaveBtn').innerText = 'שמירה';
+        document.getElementById('finCancelEditBtn').style.display = 'none';
     };
 
     window.loadFinanceData = function() {
@@ -1536,11 +1576,15 @@ window.saveFinanceRecord = function() {
                 let color = r.type === 'income' ? '#28a745' : '#dc3545';
                 let sign = r.type === 'income' ? '+' : '-';
                 
+                // 🔥 הוספתי כאן את כפתור העריכה (✏️) ליד כפתור המחיקה
                 list.innerHTML += `
                 <div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; align-items:center;">
                     <div style="flex:1;"><strong>${r.desc}</strong><br><span style="font-size:12px; color:#777;">${r.date.split('-').reverse().join('.')}</span></div>
                     <div style="color:${color}; font-weight:bold; direction:ltr; margin-left: 10px;">${sign} ₪${r.amount}</div>
-                    <button style="background:none; border:none; color:#dc3545; font-size:16px; cursor:pointer; padding:5px;" onclick="deleteFinanceRecord('${r.id}')">🗑️</button>
+                    <div style="display:flex; gap:5px;">
+                        <button style="background:none; border:none; color:#007bff; font-size:16px; cursor:pointer; padding:5px;" onclick="editFinanceRecord('${r.id}')">✏️</button>
+                        <button style="background:none; border:none; color:#dc3545; font-size:16px; cursor:pointer; padding:5px;" onclick="deleteFinanceRecord('${r.id}')">🗑️</button>
+                    </div>
                 </div>`;
             });
             

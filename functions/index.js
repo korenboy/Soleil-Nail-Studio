@@ -97,20 +97,32 @@ exports.sendBroadcastSms = onCall({ cors: true, invoker: "public" }, async (requ
 });
 
 exports.sendReminderSms = onCall({ cors: true, invoker: "public" }, async (request) => {
-    const { phone, clientName, date, time, id} = request.data;
+    // מושכים את ה-id שהאדמין שולח אלינו
+    const { phone, clientName, date, time, id } = request.data; 
     const address = process.env.CLINIC_ADDRESS || "";
+    // הלינק המדויק לאישור הגעה מהיר
     const confirmLink = `https://nails-by-natali.web.app/?action=confirm_arrival&id=${id}`;
+    
     await sendPulseemSMS(phone, `היי ${clientName}, תזכורת לתור ב-Soleil ב-${date} בשעה ${time} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`);
     return { success: true };
 });
 
-// ====== טריגרים אוטומטיים לטלגרם ======
-
 exports.onNewAppointment = onDocumentCreated('appointments/{appId}', async (event) => {
     const app = event.data.data();
     const appId = event.params.appId;
-    const text = `🗓 <b>תור חדש ל-Soleil!</b>\n\n👤 ${app.clientName}\n💅 ${app.treatment}\n📅 ${app.date} | ${app.time}\n\n<a href="${ADMIN_APP_URL}?action=approve_app&id=${appId}">✅ לאישור</a>`;
-    await sendTelegramMessage(text);
+    
+    // 1. אם הלקוחה קבעה בעצמה (הסטטוס ממתין) -> נשלח הודעה לנטלי בטלגרם לאישור
+    if (app.status === 'pending') {
+        const text = `🗓 <b>תור חדש ל-Soleil!</b>\n\n👤 ${app.clientName}\n💅 ${app.treatment}\n📅 ${app.date} | ${app.time}\n\n<a href="${ADMIN_APP_URL}?action=approve_app&id=${appId}">✅ לאישור</a>`;
+        await sendTelegramMessage(text);
+    } 
+    // 2. 🔥 התיקון: אם נטלי קבעה ידנית (הסטטוס נוצר מראש כמאושר) -> נשלח SMS ללקוחה
+    else if (app.status === 'approved') {
+        const address = process.env.CLINIC_ADDRESS || "";
+        const msg = `היי ${app.clientName}, נקבע לך תור חדש ב-Soleil! ✨\nניפגש ב-${app.date} בשעה ${app.time}.\nכתובתנו: ${address}`;
+        await sendPulseemSMS(app.clientPhone, msg);
+        console.log(`Manual booking SMS sent to ${app.clientName}`);
+    }
 });
 
 exports.onNewUser = onDocumentCreated('users/{phone}', async (event) => {
@@ -215,3 +227,100 @@ exports.onAppointmentCanceled = onDocumentUpdated('appointments/{appId}', async 
         
         return null;
     });
+
+ // ============================================================================
+// אוטומציה: שליחת SMS ללקוחה כשהתור מאושר
+// ============================================================================
+exports.onAppointmentApproved = onDocumentUpdated('appointments/{appId}', async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+
+    // בודק אם הסטטוס השתנה מ-pending ל-approved
+    if (before.status !== 'approved' && after.status === 'approved') {
+        const clientName = after.clientName;
+        const phone = after.clientPhone;
+        const date = after.date;
+        const time = after.time;
+        const address = process.env.CLINIC_ADDRESS || "";
+
+        const msg = `היי ${clientName}, התור שלך ב-Soleil אושר! ✨\nניפגש ב-${date} בשעה ${time}.\nכתובתנו: ${address}`;
+        await sendPulseemSMS(phone, msg);
+        console.log(`Approval SMS sent to ${clientName} for ${date} at ${time}`);
+    }
+    return null;
+});
+
+// ============================================================================
+// אוטומציה: סריקת תורים שהסתיימו ועדכון הכנסות אוטומטי (כל שעה עגולה)
+// ============================================================================
+exports.autoRecordIncome = onSchedule({ schedule: '0 * * * *', timeZone: 'Asia/Jerusalem' }, async (event) => {
+    try {
+        const nowIL = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
+        const currentYear = nowIL.getFullYear();
+        const currentMonth = String(nowIL.getMonth() + 1).padStart(2, '0');
+        const currentDay = String(nowIL.getDate()).padStart(2, '0');
+        const currentHour = String(nowIL.getHours()).padStart(2, '0');
+        const currentMin = String(nowIL.getMinutes()).padStart(2, '0');
+        
+        const todayStr = `${currentYear}-${currentMonth}-${currentDay}`;
+        const currentTimeStr = `${currentHour}:${currentMin}`;
+
+        // 🔥 תיקון 1: מושכים רק לפי סטטוס כדי לעקוף את שגיאת האינדקס של פיירבייס
+        const snapshot = await db.collection('appointments')
+            .where('status', '==', 'approved')
+            .get();
+
+        if (snapshot.empty) return null;
+
+        const treatmentsSnap = await db.collection('treatments').get();
+        const prices = {};
+        treatmentsSnap.forEach(doc => {
+            let p = doc.data().price;
+            prices[doc.data().name] = (typeof p === 'string') ? parseFloat(p.replace(/[^0-9.]/g, '')) || 0 : (p || 0);
+        });
+
+        const batch = db.batch();
+        let addedCount = 0;
+
+        snapshot.forEach(doc => {
+            const app = doc.data();
+            
+            // אם ההכנסה כבר נרשמה, מדלגים
+            if (app.financeRecorded) return;
+
+            // 🔥 תיקון 2: מוודאים אישור לקוחה דרך הלינק, *או* אם נטלי קבעה לה ידנית במקום
+            const isConfirmed = app.clientConfirmed === true || (app.statusText && app.statusText.includes("נקבע ע\"י הקליניקה"));
+            if (!isConfirmed) return;
+
+            // בודקים אם שעת התור עברה
+            const isPastDay = app.fullDate < todayStr;
+            const isPastTimeToday = (app.fullDate === todayStr && app.time <= currentTimeStr);
+
+            if (isPastDay || isPastTimeToday) {
+                const price = prices[app.treatment] || 0;
+                
+                const finRef = db.collection('finance').doc();
+                batch.set(finRef, {
+                    id: finRef.id,
+                    type: 'income',
+                    amount: price,
+                    desc: `טיפול: ${app.treatment} (${app.clientName})`,
+                    date: app.fullDate,
+                    month: app.fullDate.substring(0, 7), // שומר על סינון החודש לרואה חשבון
+                    timestamp: admin.firestore.FieldValue.serverTimestamp()
+                });
+
+                batch.update(doc.ref, { financeRecorded: true });
+                addedCount++;
+            }
+        });
+
+        if (addedCount > 0) {
+            await batch.commit();
+            console.log(`Successfully recorded ${addedCount} incomes for completed appointments.`);
+        }
+    } catch (error) {
+        console.error("Error in autoRecordIncome:", error);
+    }
+    return null;
+});
