@@ -12,6 +12,9 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID; 
 const ADMIN_APP_URL = "https://nails-by-natali.web.app/admin.html";
 
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { google } = require('googleapis');
+
 async function sendTelegramMessage(text) {
     if (!TELEGRAM_BOT_TOKEN) return;
     try {
@@ -323,4 +326,84 @@ exports.autoRecordIncome = onSchedule({ schedule: '0 * * * *', timeZone: 'Asia/J
         console.error("Error in autoRecordIncome:", error);
     }
     return null;
+});
+
+// ============================================================================
+// אוטומציה: סנכרון חי ודו-כיווני מול Google Calendar
+// ============================================================================
+const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
+
+async function syncAppointmentToGoogleCalendar(appId, appData) {
+    try {
+        // מתחבר אוטומטית בענן עם הרשאות השרת של Firebase
+        const auth = new google.auth.GoogleAuth({
+            scopes: ['https://www.googleapis.com/auth/calendar']
+        });
+        const calendar = google.calendar({ version: 'v3', auth });
+        
+        // גוגל דורש ID ייחודי בפורמט מיוחד, אז נהפוך את ה-ID שלנו למבנה חוקי
+        const gEventId = Buffer.from(appId).toString('hex'); 
+        
+        // אם התור בוטל או שזה לא סטטוס מאושר - נמחק אותו מהיומן (אם הוא קיים)
+        if (!appData || appData.status !== 'approved') {
+            try {
+                await calendar.events.delete({ calendarId: GOOGLE_CALENDAR_ID, eventId: gEventId });
+                console.log(`Deleted event ${gEventId} from Google Calendar`);
+            } catch (e) {
+                if (e.code !== 404) console.error("Error deleting event:", e);
+            }
+            return;
+        }
+
+        // חישוב שעות וזמנים
+        const [startH, startM] = (appData.time || "00:00").split(':').map(Number);
+        const duration = parseInt(appData.duration || 60);
+        const endMin = startH * 60 + startM + duration;
+        const endH = String(Math.floor(endMin / 60)).padStart(2, '0');
+        const endM = String(endMin % 60).padStart(2, '0');
+
+        // פורמט תאריך ושעה שגוגל דורש (כולל אזור זמן של ישראל)
+        const startTimeStr = `${appData.fullDate}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`;
+        const endTimeStr = `${appData.fullDate}T${endH}:${endM}:00`;
+
+        const event = {
+            summary: `💅 ${appData.clientName} - ${appData.treatment}`,
+            description: `טלפון: ${appData.clientPhone}\nטיפול: ${appData.treatment}\nמשך: ${duration} דק'`,
+            start: { dateTime: startTimeStr, timeZone: 'Asia/Jerusalem' },
+            end: { dateTime: endTimeStr, timeZone: 'Asia/Jerusalem' },
+            colorId: '4' // צבע ורוד-אדמדם נעים ביומן גוגל
+        };
+
+        try {
+            // קודם ננסה למשוך את האירוע. אם קיים - נעדכן אותו
+            await calendar.events.get({ calendarId: GOOGLE_CALENDAR_ID, eventId: gEventId });
+            await calendar.events.update({ calendarId: GOOGLE_CALENDAR_ID, eventId: gEventId, resource: event });
+            console.log(`Updated event ${gEventId} in Google Calendar`);
+        } catch (e) {
+            // אם זרק שגיאה 404, סימן שהתור לא ביומן, אז ניצור חדש!
+            if (e.code === 404) {
+                event.id = gEventId;
+                await calendar.events.insert({ calendarId: GOOGLE_CALENDAR_ID, resource: event });
+                console.log(`Inserted new event ${gEventId} to Google Calendar`);
+            } else {
+                throw e;
+            }
+        }
+    } catch (error) {
+        console.error("Error syncing to Google Calendar:", error);
+    }
+}
+
+// פונקציית האזנה שמזהה *כל* שינוי בתור (יצירה, עריכת שעה או ביטול) ומפעילה את הסנכרון
+exports.googleCalendarSync = onDocumentWritten('appointments/{appId}', async (event) => {
+    const appId = event.params.appId;
+    
+    // אם התור נמחק לגמרי מהדאטהבייס
+    if (!event.data.after.exists) {
+        await syncAppointmentToGoogleCalendar(appId, { status: 'canceled' });
+        return;
+    }
+    
+    const appData = event.data.after.data();
+    await syncAppointmentToGoogleCalendar(appId, appData);
 });

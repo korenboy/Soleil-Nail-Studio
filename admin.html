@@ -1180,6 +1180,63 @@ window.saveClientAppConfig = function(silent = false) {
     function timeToMinutes(timeStr) { let [h, m] = (timeStr||"00:00").split(':').map(Number); return h * 60 + m; }
     function isOverlapping(start1, end1, start2, end2) { return Math.max(start1, start2) < Math.min(end1, end2); }
 
+    // ==========================================
+    // ייצוא יומן לאייפון (iCalendar) - מתוקן!
+    // ==========================================
+    window.exportAdminCalendar = function() {
+        let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        let futureApps = allApps.filter(app => app && app.status === 'approved' && app.fullDate >= todayStr);
+
+        if (futureApps.length === 0) {
+            alert("אין לך תורים עתידיים פנויים לסנכרון.");
+            return;
+        }
+
+        let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Soleil Nail Studio//Admin//HE\nCALSCALE:GREGORIAN\n";
+        
+        // יצירת חותמת זמן מדויקת לפורמט iCal
+        const dtStamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+        futureApps.forEach(app => {
+            if(!app.fullDate || !app.time) return;
+            
+            let datePart = app.fullDate.replace(/-/g, ''); 
+            let [h, m] = app.time.split(':').map(Number);
+            let startH = String(h).padStart(2, '0');
+            let startM = String(m).padStart(2, '0');
+            let dtStart = `${datePart}T${startH}${startM}00`; 
+            
+            let duration = parseInt(app.duration || 60);
+            let endMin = h * 60 + m + duration;
+            let endH = String(Math.floor(endMin / 60)).padStart(2, '0');
+            let endM = String(endMin % 60).padStart(2, '0');
+            let dtEnd = `${datePart}T${endH}${endM}00`;
+
+            icsContent += "BEGIN:VEVENT\n";
+            icsContent += `UID:app_${app.id}@soleil.clinic\n`; // מזהה ייחודי קריטי לאייפון!
+            icsContent += `DTSTAMP:${dtStamp}\n`;
+            icsContent += `DTSTART:${dtStart}\n`;
+            icsContent += `DTEND:${dtEnd}\n`;
+            icsContent += `SUMMARY:לקוחה: ${app.clientName} (${app.treatment})\n`;
+            icsContent += `DESCRIPTION:טלפון: ${app.clientPhone}\\nטיפול: ${app.treatment}\\nמשך: ${duration} דקות\n`;
+            icsContent += "END:VEVENT\n";
+        });
+
+        icsContent += "END:VCALENDAR";
+
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Soleil_Appointments_${todayStr}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    };
+
     let selectedManualClient = null;
 
     // עדכון פתיחת החלון כדי שיטען גם תאריכים
