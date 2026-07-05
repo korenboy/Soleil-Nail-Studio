@@ -218,6 +218,7 @@
 
             <section id="clientsScreen" class="admin-screen">
                 <h2 style="margin-top:0;">ניהול לקוחות 👥</h2>
+                <button class="btn-submit" style="background:#111; color:#C2A878; width:auto; padding:8px 15px; margin-bottom:15px; border:none;" onclick="document.getElementById('addClientModal').classList.add('active')">+ הוספת לקוחה חדשה</button>
                 <h3 style="font-size:15px; color:#ffc107;">ממתינות לאישור ⏳</h3>
                 <div id="pendingUsersList"></div>
                 <h3 style="font-size:15px; color:#28a745; margin-top:20px;">לקוחות פעילות ✔️</h3>
@@ -348,9 +349,10 @@
         <input type="text" id="manualSearchClient" class="form-input" placeholder="חפשי לקוחה..." oninput="filterClientsForManual()">
         <div id="manualClientResults" style="max-height: 100px; overflow-y: auto; margin-bottom:10px;"></div>
         <button style="background: none; border: 1px dashed #C2A878; color: #C2A878; width:100%; padding: 8px; border-radius: 8px; margin-bottom: 15px;" onclick="toggleNewClientForm()">+ לקוחה חדשה</button>
-        <div id="newClientManualForm" style="display: none; background: #fafafa; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-            <input type="text" id="newClientName" class="form-input" placeholder="שם הלקוחה">
-            <input type="tel" id="newClientPhone" class="form-input" placeholder="טלפון">
+        <div id="newClientManualForm" style="display: none; background: #fafafa; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee;">
+            <p style="font-size: 12px; color: #777; margin-top: 0; text-align: center;">💡 טיפ לאייפון: לחצי על השדה כדי להשלים מאנשי הקשר (AutoFill)</p>
+            <input type="text" id="newClientName" class="form-input" placeholder="שם הלקוחה" autocomplete="name">
+            <input type="tel" id="newClientPhone" class="form-input" placeholder="טלפון" autocomplete="tel" onchange="this.value = cleanPhoneNumber(this.value)">
         </div>
         <select id="manualTreatment" class="form-input" onchange="calculateManualAvailableTimes()">
             <option value="">טוען טיפולים...</option>
@@ -381,6 +383,20 @@
         <div class="stats-grid" id="cdStats" style="gap:5px; margin-bottom:15px;"></div>
         <div id="cdHistoryList" style="max-height: 150px; overflow-y: auto; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px; margin-bottom: 10px;"></div>
         <button class="btn-submit" onclick="document.getElementById('clientDetailsModal').classList.remove('active')">סגירה</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addClientModal">
+    <div class="modal-box">
+        <h3 style="margin-top: 0; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 10px;">הוספת לקוחה 👤</h3>
+        
+        <p style="font-size: 12px; color: #777; text-align: center;">💡 טיפ לאייפון: המקלדת תציע לך השלמה מאנשי הקשר</p>
+        
+        <input type="text" id="addClientName" class="form-input" placeholder="שם הלקוחה" autocomplete="name">
+        <input type="tel" id="addClientPhone" class="form-input" placeholder="מספר טלפון" autocomplete="tel" onchange="this.value = cleanPhoneNumber(this.value)">
+        
+        <button class="btn-submit" onclick="saveNewClientDirect()">שמירת לקוחה במערכת</button>
+        <button style="background: none; border: none; width: 100%; color: #777; padding:10px;" onclick="document.getElementById('addClientModal').classList.remove('active')">ביטול</button>
     </div>
 </div>
 
@@ -1662,6 +1678,66 @@ window.saveFinanceRecord = function() {
         if(confirm("האם למחוק תנועה זו?")) {
             db.collection('finance').doc(id).delete().then(() => loadFinanceData());
         }
+    };
+
+    // ==========================================
+    // שמירת לקוחה ישירות מהמסך "ניהול לקוחות"
+    // ==========================================
+    window.saveNewClientDirect = function() {
+        const name = document.getElementById('addClientName').value.trim();
+        const phone = document.getElementById('addClientPhone').value.trim();
+
+        if (!name || !phone) { alert("יש להזין שם ומספר טלפון"); return; }
+        if (phone.length < 9) { alert("מספר טלפון לא נראה תקין"); return; }
+
+        // פה תוקן הבאג - מושך את הכפתור הנכון בלי להתבלבל!
+        const btn = document.querySelector('#addClientModal .btn-submit');
+        if (btn) {
+            btn.innerText = 'שומר...'; 
+            btn.disabled = true;
+        }
+
+        db.collection("users").doc(phone).set({
+            name: name,
+            phone: phone,
+            status: 'approved' // מאשרים אותה אוטומטית כי נטלי הוסיפה אותה
+        }).then(() => {
+            alert("הלקוחה הוספה בהצלחה לרשימת הלקוחות שלך! ✅");
+            document.getElementById('addClientModal').classList.remove('active');
+            document.getElementById('addClientName').value = '';
+            document.getElementById('addClientPhone').value = '';
+        }).catch(err => {
+            console.error("Error adding client:", err);
+            alert("שגיאה בשמירת הלקוחה.");
+        }).finally(() => {
+            if (btn) {
+                btn.innerText = 'שמירת לקוחה במערכת'; 
+                btn.disabled = false;
+            }
+        });
+    };
+
+    // ==========================================
+    // מסנן לסידור מספרי טלפון אוטומטי מה-AutoFill
+    // ==========================================
+    window.cleanPhoneNumber = function(phone) {
+        if (!phone) return "";
+        // 1. מחיקת רווחים, מקפים וסוגריים
+        let cleaned = phone.replace(/[\s\-()]/g, '');
+        
+        // 2. החלפת קידומת בינלאומית ישראלית באפס
+        if (cleaned.startsWith('+972')) {
+            cleaned = '0' + cleaned.substring(4);
+        } else if (cleaned.startsWith('972')) {
+            cleaned = '0' + cleaned.substring(3);
+        }
+        
+        // 3. אם המספר הוזן בלי אפס ויש לו 9 ספרות (לדוגמה 541234567)
+        if (!cleaned.startsWith('0') && cleaned.length === 9) {
+            cleaned = '0' + cleaned;
+        }
+        
+        return cleaned;
     };
 </script>
 </body>
