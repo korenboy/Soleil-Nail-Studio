@@ -10,7 +10,7 @@ const db = admin.firestore();
 // הגדרות טלגרם
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; 
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID; 
-const ADMIN_APP_URL = "https://nails-by-natali.web.app/admin.html";
+const ADMIN_APP_URL = "https://soleilnailstudio.co.il/admin.html";
 
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { google } = require('googleapis');
@@ -104,7 +104,7 @@ exports.sendReminderSms = onCall({ cors: true, invoker: "public" }, async (reque
     const { phone, clientName, date, time, id } = request.data; 
     const address = process.env.CLINIC_ADDRESS || "";
     // הלינק המדויק לאישור הגעה מהיר
-    const confirmLink = `https://nails-by-natali.web.app/?action=confirm_arrival&id=${id}`;
+    const confirmLink = `https://soleilnailstudio.co.il/?action=confirm_arrival&id=$){id}`;
     
     await sendPulseemSMS(phone, `היי ${clientName}, תזכורת לתור ב-Soleil ב-${date} בשעה ${time} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`);
     return { success: true };
@@ -208,7 +208,7 @@ exports.onAppointmentCanceled = onDocumentUpdated('appointments/{appId}', async 
 
                     // 3. שליחת SMS לבנות הממתינות
                     if (phonesToAlert.length > 0) {
-                        const smsMsg = `היי! התפנה תור מפתיע בקליניקה בתאריך ${date} בשעה ${time}. מהרי לתפוס אותו באפליקציה לפני שייתפס: https://nails-by-natali.web.app`;
+                        const smsMsg = `היי! התפנה תור מפתיע בקליניקה בתאריך ${date} בשעה ${time}. מהרי לתפוס אותו באפליקציה לפני שייתפס: https://soleilnailstudio.co.il`;
                         
                         // קריאה לפונקציית ה-SMS עבור כל לקוחה ברשימה
                         for (const phone of phonesToAlert) {
