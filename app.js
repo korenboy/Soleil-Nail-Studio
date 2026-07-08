@@ -431,40 +431,73 @@ function renderBookingDays() {
     });
 }
 
+// פונקציות עזר לזמנים
+function timeToMins(timeStr) {
+    let [h, m] = (timeStr || "00:00").split(':').map(Number);
+    return h * 60 + m;
+}
+
+function minsToTime(mins) {
+    let h = String(Math.floor(mins / 60)).padStart(2, '0');
+    let m = String(mins % 60).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
 function renderBookingTimes(shift, dateFormatted) {
-    const timesList = document.getElementById('dynamicTimesList'); timesList.innerHTML = ''; document.getElementById('confirmTimeAction').style.display = 'none';
-    let curr = timeToMinutes(shift.start); let end = timeToMinutes(shift.end); let bs = shift.breakStart ? timeToMinutes(shift.breakStart) : -1; let be = shift.breakEnd ? timeToMinutes(shift.breakEnd) : -1;
-    const allApps = JSON.parse(localStorage.getItem('myAppointments')) || []; const bookedApps = allApps.filter(a => a && a.status !== 'canceled' && a.date === dateFormatted);
-    let hasSlots = false; let treatmentDuration = window.selectedTreatmentDuration || 60;
+    const timesList = document.getElementById('dynamicTimesList'); 
+    timesList.innerHTML = ''; 
+    document.getElementById('confirmTimeAction').style.display = 'none';
+
+    // חסימת יום חופש
+    if (shift.isClosed) {
+        timesList.innerHTML = '<p style="text-align:center; color:#dc3545; font-weight:bold; grid-column:1/-1; padding:20px;">הקליניקה סגורה ביום זה (יום חופש). 🌴</p>';
+        return;
+    }
+
+    let curr = timeToMins(shift.start); 
+    let end = timeToMins(shift.end); 
+    let bs = shift.breakStart ? timeToMins(shift.breakStart) : -1; 
+    let be = shift.breakEnd ? timeToMins(shift.breakEnd) : -1;
     
-    // --- חישוב זמן נוכחי מדויק במכשיר המשתמש ---
+    const allApps = JSON.parse(localStorage.getItem('myAppointments')) || []; 
+    const bookedApps = allApps.filter(a => a && a.status !== 'canceled' && a.date === dateFormatted);
+    let hasSlots = false; 
+    let treatmentDuration = window.selectedTreatmentDuration || 60;
+    
     const now = new Date();
-    const localYear = now.getFullYear();
-    const localMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const localDay = String(now.getDate()).padStart(2, '0');
-    const localTodayStr = `${localYear}-${localMonth}-${localDay}`;
-    
+    const localTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const isToday = (shift.date === localTodayStr);
-    
-    // הוספת באפר: חוסמים שעות קרובות (פחות מ-30 דקות מעכשיו) כדי שלא יקבעו תור לעוד שנייה
     const currentMinutesWithBuffer = (now.getHours() * 60) + now.getMinutes() + 30;
 
-    while(curr + treatmentDuration <= end) {
-        let slotStart = curr; let slotEnd = curr + treatmentDuration; let timeStr = `${String(Math.floor(curr/60)).padStart(2,'0')}:${String(curr%60).padStart(2,'0')}`;
-        let overlapsBreak = (bs !== -1 && isOverlapping(slotStart, slotEnd, bs, be));
-        let overlapsBooked = bookedApps.some(a => { let aStart = timeToMinutes(a.time); let aDuration = parseInt(a.duration || 60); let aEnd = aStart + aDuration; return isOverlapping(slotStart, slotEnd, aStart, aEnd); });
-        
-        // הבדיקה שמסננת את שעות העבר
-        let isPastTime = isToday && (slotStart <= currentMinutesWithBuffer);
+    // יצירת מערך של כל הבלוקים התפוסים (תורים + הפסקות)
+    let blocks = bookedApps.map(a => ({ start: timeToMins(a.time), end: timeToMins(a.time) + parseInt(a.duration || 60) }));
+    if (bs !== -1 && be !== -1) blocks.push({ start: bs, end: be });
+    blocks.sort((a, b) => a.start - b.start);
 
-        if(!overlapsBreak && !overlapsBooked && !isPastTime) { 
-            hasSlots = true; 
-            let btn = document.createElement('div'); btn.className = 'time-btn'; btn.innerText = timeStr; 
-            btn.onclick = () => { document.querySelectorAll('.time-btn').forEach(el => el.classList.remove('selected')); btn.classList.add('selected'); document.getElementById('confirmTimeAction').style.display = 'block'; }; 
-            timesList.appendChild(btn); 
+    // מציאת בלוקים פנויים לגמרי
+    let freeBlocks = [];
+    let currentPointer = curr;
+    blocks.forEach(b => {
+        if (currentPointer < b.start) freeBlocks.push({ start: currentPointer, end: b.start });
+        if (currentPointer < b.end) currentPointer = b.end;
+    });
+    if (currentPointer < end) freeBlocks.push({ start: currentPointer, end: end });
+
+    // יצירת הכפתורים רצוף בלי חורים!
+    freeBlocks.forEach(block => {
+        let slotPointer = block.start;
+        while (slotPointer + treatmentDuration <= block.end) {
+            let isPastTime = isToday && (slotPointer <= currentMinutesWithBuffer);
+            if (!isPastTime) {
+                hasSlots = true;
+                let timeStr = minsToTime(slotPointer);
+                let btn = document.createElement('div'); btn.className = 'time-btn'; btn.innerText = timeStr;
+                btn.onclick = () => { document.querySelectorAll('.time-btn').forEach(el => el.classList.remove('selected')); btn.classList.add('selected'); document.getElementById('confirmTimeAction').style.display = 'block'; };
+                timesList.appendChild(btn);
+            }
+            slotPointer += treatmentDuration; // זז בדיוק באורך הטיפול!
         }
-        curr += 30; 
-    }
+    });
     
     if(!hasSlots) {
         timesList.innerHTML = `
@@ -513,8 +546,7 @@ document.getElementById('approveTermsBtn')?.addEventListener('click', () => {
   
   const appId = Date.now().toString();
   const treatmentDur = window.selectedTreatmentDuration || 60;
-  const newAppointment = { id: appId, clientName: currentUserName || currentUser.name, clientPhone: currentUserPhone || currentUser.phone, treatment: selectedTreatment, duration: treatmentDur, date: selectedDayDisplay, fullDate: selectedFullDate, time: selectedTime, status: 'pending', statusText: 'מחכה לאישור ⏳', clientConfirmed: false };
-  
+  const newAppointment = { id: appId, clientName: currentUserName || currentUser.name, clientPhone: currentUserPhone || currentUser.phone, treatment: selectedTreatment, duration: treatmentDur, date: selectedDayDisplay, fullDate: selectedFullDate, time: selectedTime, status: 'pending', statusText: 'מחכה לאישור ⏳', clientConfirmed: false, notes: document.getElementById('clientNotes').value.trim() || "" };  
   db.collection("appointments").doc(appId).set(newAppointment).then(() => {
       notifyAdmin(`תור חדש ממתין לאישור: ${currentUserName || currentUser.name} ל-${selectedDayDisplay} בשעה ${selectedTime}`, 'app', appId);
       const sumScreen = document.getElementById('summaryScreen'); 

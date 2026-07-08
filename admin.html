@@ -359,7 +359,7 @@
         </select>
         <select id="manualDateSelect" class="form-input" onchange="calculateManualAvailableTimes()"><option value="">בחרי תאריך...</option></select>
         <select id="manualTimeSelect" class="form-input"><option value="">בחרי יום תחילה...</option></select>
-        <button class="btn-submit" id="saveManualBtn" onclick="saveManualAppointment()" disabled>שמירת תור</button>
+        <textarea id="newClientNotes" class="form-input" placeholder="הערות לטיפול..." style="height: 60px; margin-bottom:15px;"></textarea>        <button class="btn-submit" id="saveManualBtn" onclick="saveManualAppointment()" disabled>שמירת תור</button>
         <button style="background: none; border: none; width: 100%; color: #777; padding:10px;" onclick="closeManualBookModal()">ביטול</button>
     </div>
 </div>
@@ -370,7 +370,14 @@
         <input type="hidden" id="shiftModalDate">
         <div style="display:flex; gap:10px;"><div style="flex:1;"><label style="font-size:12px;">התחלה:</label><input type="time" class="form-input" id="shiftStart" value="09:00"></div><div style="flex:1;"><label style="font-size:12px;">סיום:</label><input type="time" class="form-input" id="shiftEnd" value="18:00"></div></div>
         <div style="display:flex; gap:10px;"><div style="flex:1;"><label style="font-size:12px;">הפסקה מ-:</label><input type="time" class="form-input" id="shiftBreakStart"></div><div style="flex:1;"><label style="font-size:12px;">עד-:</label><input type="time" class="form-input" id="shiftBreakEnd"></div></div>
-        <button class="btn-submit" onclick="saveShift()" style="margin-top:10px;">שמירה</button>
+        <div style="margin: 15px 0; text-align: right;">
+    <label style="display: block; margin-bottom: 10px; font-size: 14px;">
+        <input type="checkbox" id="shiftRecurring"> שכפל משמרת זו ל-12 שבועות קדימה
+    </label>
+    <label style="display: block; color: #dc3545; font-weight: bold; font-size: 14px;">
+        <input type="checkbox" id="shiftClosed"> 🛑 סגור יום ללקוחות (חופש / קביעה ידנית בלבד)
+    </label>
+</div>        <button class="btn-submit" onclick="saveShift()" style="margin-top:10px;">שמירה</button>
         <button class="btn-submit btn-delete" id="deleteShiftBtn" onclick="deleteShift()">מחק יומן</button>
         <button style="background:none; border:none; width:100%; color:#777; padding:10px;" onclick="document.getElementById('shiftModal').classList.remove('active')">ביטול</button>
     </div>
@@ -927,8 +934,8 @@ window.closeManualBookModal = function() {
             if(!app) return; let isPast = false; if(app.fullDate && app.fullDate < todayStr) isPast = true; else if (app.fullDate === todayStr) { const [h, m] = (app.time || "00:00").split(':').map(Number); if ((h * 60 + m) < currentMinutes) isPast = true; }
             let confirmedText = app.clientConfirmed ? `<span style="color:#28a745; font-size:12px;">✅ אישרה</span>` : '';
             let reminderStatus = app.reminderSmsSent ? '<span style="font-size: 13px; color: #28a745; background: #e8f5e9; padding: 2px 8px; border-radius: 10px; margin-right: 8px;">✉️ תזכורת נשלחה</span>' : '';
-            let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${app.treatment} ${confirmedText}</div>`;
-            
+let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${app.treatment} ${confirmedText}</div>`;
+if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color: #555; background: #fdfbf7; border: 1px dashed #C2A878; padding: 8px; border-radius: 4px;">📝 <b>הערות:</b> ${app.notes}</div>`; }            
             if (app.status === 'pending') {
                 pendingList.innerHTML += html + `<div style="display:flex; gap:5px;"><button class="btn-approve" onclick="approveApp('${app.id}')">אשרי תור</button><button class="btn-edit" onclick="openEditAppModal('${app.id}')">✏️</button><button class="btn-block" onclick="cancelApp('${app.id}')">ביטול</button></div></div>`;
             } else if (app.status === 'approved') {
@@ -1045,8 +1052,7 @@ window.removeFromWaitlist = function(id) {
             
             let html = `<div style="background:#fafafa; padding:15px; border-radius:12px; border:1px solid #eee;">`;
             html += `<div style="display:flex; justify-content:space-between; margin-bottom:15px; border-bottom:1px solid #ddd; padding-bottom:10px;">
-                        <strong>משמרת: ${shift ? `<span style="color:#28a745;">${shift.start} - ${shift.end}</span>` : '<span style="color:#dc3545">לא הוגדרה</span>'}</strong>
-                        <button class="btn-action" style="background:#111; color:#C2A878; padding:4px 10px; border-radius:8px;" onclick="openShiftModalFromDay()">ערוך משמרת</button>
+<strong>משמרת: ${shift ? (shift.isClosed ? '<span style="color:#dc3545;">יום סגור (חופש) 🛑</span>' : `<span style="color:#28a745;">${shift.start} - ${shift.end}</span>`) : '<span style="color:#dc3545">לא הוגדרה</span>'}</strong>                        <button class="btn-action" style="background:#111; color:#C2A878; padding:4px 10px; border-radius:8px;" onclick="openShiftModalFromDay()">ערוך משמרת</button>
                      </div>`;
             if(dayApps.length === 0) html += `<p style="text-align:center; color:#777; font-size:14px;">אין תורים ליום זה.</p>`;
             else {
@@ -1082,55 +1088,139 @@ window.removeFromWaitlist = function(id) {
     window.goToToday = function() { currentCalDate = new Date(); renderCalendar(); };
     window.openWeeklyTemplateModal = function() { document.getElementById('weeklyTemplateModal').classList.add('active'); };
     window.generateWeeklyShifts = async function() {
-    const mwStart = document.getElementById('defMidweekStart').value;
-    const mwEnd = document.getElementById('defMidweekEnd').value;
-    const mwBStart = document.getElementById('defMidweekBreakStart').value;
-    const mwBEnd = document.getElementById('defMidweekBreakEnd').value;
+        const mwStart = document.getElementById('defMidweekStart').value;
+        const mwEnd = document.getElementById('defMidweekEnd').value;
+        const mwBStart = document.getElementById('defMidweekBreakStart').value;
+        const mwBEnd = document.getElementById('defMidweekBreakEnd').value;
 
-    const frStart = document.getElementById('defFridayStart').value;
-    const frEnd = document.getElementById('defFridayEnd').value;
-    const frBStart = document.getElementById('defFridayBreakStart').value;
-    const frBEnd = document.getElementById('defFridayBreakEnd').value;
-    
-    const btn = document.querySelector('#weeklyTemplateModal .btn-submit');
-    btn.innerText = 'פותח משמרות...'; btn.disabled = true;
+        const frStart = document.getElementById('defFridayStart').value;
+        const frEnd = document.getElementById('defFridayEnd').value;
+        const frBStart = document.getElementById('defFridayBreakStart').value;
+        const frBEnd = document.getElementById('defFridayBreakEnd').value;
 
-    let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || [];
-    const batch = db.batch(); let added = 0;
-    
-    for(let i=0; i<90; i++) {
-        let d = new Date(); d.setDate(d.getDate() + i);
-        let dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        let dayOfWeek = d.getDay();
-        
-        if(adminShifts.find(s => s.date === dateStr)) continue; 
-        
-        let start = null, end = null, bStart = "", bEnd = "";
-        if(dayOfWeek >= 0 && dayOfWeek <= 4 && mwStart && mwEnd) { 
-            start = mwStart; end = mwEnd; bStart = mwBStart; bEnd = mwBEnd;
-        } else if(dayOfWeek === 5 && frStart && frEnd) { 
-            start = frStart; end = frEnd; bStart = frBStart; bEnd = frBEnd;
+        if(!mwStart || !mwEnd || !frStart || !frEnd) {
+            alert("חובה להזין שעות התחלה וסיום.");
+            return;
         }
-        
-        if(start && end) {
-            let ref = db.collection('shifts').doc(dateStr);
-            batch.set(ref, { date: dateStr, start: start, end: end, breakStart: bStart, breakEnd: bEnd });
-            added++;
+
+        if(!confirm("פעולה זו תעדכן את שעות הפעילות ל-90 הימים הבאים ותפתח ימים חסרים. ימי חופש שכבר הגדרת לא ייפגעו. בטוחה שאת רוצה להמשיך?")) return;
+
+        const btn = document.querySelector('#weeklyTemplateModal .btn-submit');
+        btn.innerText = 'מעדכן יומן...'; btn.disabled = true;
+
+        try {
+            // שליפת כל המשמרות הקיימות מהענן כדי לא לדרוס חופשים שנטלי כבר סגרה
+            const shiftsSnap = await db.collection("shifts").get();
+            const existingShifts = {};
+            shiftsSnap.forEach(doc => {
+                existingShifts[doc.id] = doc.data();
+            });
+
+            const batch = db.batch();
+            let today = new Date();
+            let countUpdated = 0;
+            let countNew = 0;
+
+            for(let i=0; i<90; i++) {
+                let d = new Date(); d.setDate(today.getDate() + i);
+                let dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                let dayOfWeek = d.getDay();
+
+                // דילוג אוטומטי על שבת
+                if(dayOfWeek === 6) continue;
+
+                // בדיקה אם היום מוגדר כחופש מראש (isClosed) - אם כן, מדלגים עליו כדי לא לפתוח אותו בטעות!
+                if (existingShifts[dateStr] && existingShifts[dateStr].isClosed) {
+                    continue; 
+                }
+
+                let start = null, end = null, bStart = "", bEnd = "";
+                
+                // הגדרת השעות לפי היום בשבוע (ראשון-חמישי או שישי)
+                if(dayOfWeek >= 0 && dayOfWeek <= 4) { 
+                    start = mwStart; end = mwEnd; bStart = mwBStart; bEnd = mwBEnd;
+                } else if(dayOfWeek === 5) { 
+                    start = frStart; end = frEnd; bStart = frBStart; bEnd = frBEnd;
+                }
+
+                if(start && end) {
+                    let ref = db.collection('shifts').doc(dateStr);
+                    
+                    if (existingShifts[dateStr]) {
+                        // היום הזה כבר קיים - מעדכנים שעות בלי למחוק נתונים אחרים (merge: true)
+                        batch.set(ref, { start: start, end: end, breakStart: bStart, breakEnd: bEnd }, { merge: true });
+                        countUpdated++;
+                    } else {
+                        // היום הזה לא קיים בכלל - פותחים יום חדש מההתחלה
+                        batch.set(ref, { date: dateStr, start: start, end: end, breakStart: bStart, breakEnd: bEnd, isClosed: false });
+                        countNew++;
+                    }
+                }
+            }
+
+            if(countNew > 0 || countUpdated > 0) { 
+                await batch.commit(); 
+                alert(`היומן עודכן בהצלחה! 🚀\nנפתחו ${countNew} ימים חדשים.\nעודכנו שעות ל-${countUpdated} ימים קיימים.`); 
+            } else { 
+                alert("אין שינויים לעדכן."); 
+            }
+
+            document.getElementById('weeklyTemplateModal').classList.remove('active');
+            renderCalendar();
+
+        } catch(e) {
+            console.error(e);
+            alert("אירעה שגיאה בעדכון המשמרות.");
+        } finally {
+            btn.innerText = 'פתיחת יומן 🚀'; 
+            btn.disabled = false;
         }
-    }
-    
-    if(added > 0) { await batch.commit(); alert(`נוצרו ${added} ימי עבודה חדשים בהצלחה!`); } 
-    else { alert("היומן כבר פתוח לתקופה זו."); }
-    
-    document.getElementById('weeklyTemplateModal').classList.remove('active');
-    btn.innerText = 'פתיחת יומן 🚀'; btn.disabled = false;
-    renderCalendar();
-};
+    };
 
     window.openShiftModalFromDay = function() { const year = currentCalDate.getFullYear(); const month = currentCalDate.getMonth(); const date = currentCalDate.getDate(); let fullDateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`; let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let shift = adminShifts.find(s => s && s.date === fullDateStr); openShiftModal(fullDateStr, shift); }
     function openShiftModal(dateStr, existingShift) { document.getElementById('shiftModal').classList.add('active'); const parts = dateStr.split('-'); document.getElementById('shiftModalDate').value = dateStr; const delBtn = document.getElementById('deleteShiftBtn'); if (existingShift) { document.getElementById('shiftStart').value = existingShift.start; document.getElementById('shiftEnd').value = existingShift.end; document.getElementById('shiftBreakStart').value = existingShift.breakStart || ""; document.getElementById('shiftBreakEnd').value = existingShift.breakEnd || ""; delBtn.style.display = 'block'; } else { document.getElementById('shiftStart').value = "09:00"; document.getElementById('shiftEnd').value = "18:00"; document.getElementById('shiftBreakStart').value = ""; document.getElementById('shiftBreakEnd').value = ""; delBtn.style.display = 'none'; } }
-    window.saveShift = function() { const date = document.getElementById('shiftModalDate').value; db.collection("shifts").doc(date).set({ date, start: document.getElementById('shiftStart').value, end: document.getElementById('shiftEnd').value, breakStart: document.getElementById('shiftBreakStart').value, breakEnd: document.getElementById('shiftBreakEnd').value }).then(() => { document.getElementById('shiftModal').classList.remove('active'); renderCalendar(); }); }
-    window.deleteShift = function() { const date = document.getElementById('shiftModalDate').value; db.collection("shifts").doc(date).delete().then(() => { document.getElementById('shiftModal').classList.remove('active'); renderCalendar(); }); }
+window.saveShift = async function() {
+    const date = document.getElementById('shiftModalDate').value;
+    const start = document.getElementById('shiftStart').value;
+    const end = document.getElementById('shiftEnd').value;
+    const bStart = document.getElementById('shiftBreakStart').value;
+    const bEnd = document.getElementById('shiftBreakEnd').value;
+    const isRecurring = document.getElementById('shiftRecurring').checked;
+    const isClosed = document.getElementById('shiftClosed').checked;
+
+    if(!date) return;
+    const btn = document.querySelector('#shiftModal .btn-submit');
+    if(btn) { btn.innerText = 'שומר...'; btn.disabled = true; }
+
+    let datesToSave = [new Date(date)];
+    if (isRecurring) {
+        for(let i = 1; i <= 12; i++) {
+            let nextDate = new Date(date);
+            nextDate.setDate(nextDate.getDate() + (i * 7));
+            datesToSave.push(nextDate);
+        }
+    }
+
+    try {
+        let batch = db.batch();
+        datesToSave.forEach(d => {
+            let dateStr = d.toISOString().split('T')[0];
+            let shiftRef = db.collection('shifts').doc(dateStr);
+            batch.set(shiftRef, {
+                date: dateStr, start: start, end: end, breakStart: bStart, breakEnd: bEnd, isClosed: isClosed
+            }, { merge: true }); // Merge מונע דריסה של פתיחת יומן קיימת
+        });
+        await batch.commit();
+        document.getElementById('shiftModal').classList.remove('active');
+        document.getElementById('shiftRecurring').checked = false;
+        document.getElementById('shiftClosed').checked = false;
+        renderCalendar();
+    } catch(e) { 
+        console.error(e); alert('שגיאה בשמירת המשמרת.'); 
+    } finally { 
+        if(btn) { btn.innerText = 'שמירה'; btn.disabled = false; } 
+    }
+};    window.deleteShift = function() { const date = document.getElementById('shiftModalDate').value; db.collection("shifts").doc(date).delete().then(() => { document.getElementById('shiftModal').classList.remove('active'); renderCalendar(); }); }
     
     // (שאר הפונקציות: קביעה ידנית, פיננסים, חסימות משתמש - נשמרו לחלוטין ללא שינוי, השמטתי אותן כאן מהצגה כדי לחסוך מקום, אבל כולן מחוברות ועובדות בדיוק כפי שהיו בקובץ הקודם).
     window.approveApp = function(id) { db.collection("appointments").doc(id.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}); };
@@ -1398,7 +1488,7 @@ window.saveClientAppConfig = function(silent = false) {
         
         db.collection("appointments").doc(appId).set({
             id: appId, clientName: clientName, clientPhone: clientPhone,
-            treatment: treatName, duration: duration, date: displayDate, fullDate: dateVal, time: timeVal,
+            treatment: treatName, duration: duration, date: displayDate, fullDate: dateVal, time: timeVal, notes: document.getElementById('newClientNotes').value.trim(),
             status: 'approved', statusText: 'נקבע ע"י הקליניקה 📌', clientConfirmed: false, reminderSmsSent: false
         }).then(() => {
             alert("התור נקבע בהצלחה!");
