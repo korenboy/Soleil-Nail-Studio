@@ -7,11 +7,12 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="logo.jpg">
     <link rel="apple-touch-icon" href="logo.jpg">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#FAF9F6">
 
@@ -68,8 +69,10 @@
 
       <div class="login-box otp-box" id="otpFormSection">
         <h2>אימות מספר 🔒</h2>
-        <p style="color: #777; margin-bottom: 20px;">הקלידי את הקוד בן 4 הספרות שנשלח ל-<strong id="displayOtpPhone"></strong></p>
+        <p style="color: #777; margin-bottom: 20px;">הקלידי את הקוד בן 6 הספרות שנשלח ל-<strong id="displayOtpPhone"></strong></p>
         <div class="otp-inputs">
+            <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
+            <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
             <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
             <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
             <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">

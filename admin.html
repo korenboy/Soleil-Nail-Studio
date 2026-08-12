@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" href="logo.jpg">
     <link rel="apple-touch-icon" href="logo.jpg">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#111111">
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-    
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>    
     <title>מערכת ניהול - Soleil Nail Studio</title>
     
     <link rel="stylesheet" href="style.css">
@@ -91,18 +91,22 @@
 <div class="phone-mockup">
   <div class="app-screen">
 
-    <!-- מסך התחברות אדמין (מאובטח דרך שרת) -->
+    <!-- הוספנו את העטיפה הזו שממרכזת את הכל ומסתירה את הרקע: -->
     <div id="adminAuthScreen">
+        
         <div class="auth-box" id="adminPhoneStep">
             <h1 style="color: #111; margin-bottom: 5px;">Natali Admin 👑</h1>
             <p style="color: #777; margin-bottom: 30px; font-size:14px;">כניסה מאובטחת לניהול הקליניקה</p>
             <input type="tel" id="adminPhoneInput" class="auth-input" placeholder="מספר הטלפון שלך">
             <button class="auth-btn" id="reqAdminBtn" onclick="requestAdminOtp()">שלחי לי קוד ב-SMS</button>
         </div>
+
         <div class="auth-box" id="adminOtpStep" style="display: none;">
             <h1 style="color: #111; margin-bottom: 5px;">אימות מספר 🔒</h1>
-            <p style="color: #777; margin-bottom: 20px; font-size:14px;">הקלידי את הקוד שנשלח אלייך</p>
+            <p style="color: #777; margin-bottom: 20px; font-size:14px;">הקלידי את הקוד שנשלח אלייך (6 ספרות)</p>
             <div class="otp-digits">
+               <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="admin-otp">
+               <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="admin-otp">
                <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="admin-otp">
                <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="admin-otp">
                <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="admin-otp">
@@ -111,7 +115,8 @@
             <button class="auth-btn" id="verAdminBtn" onclick="verifyAdminOtp()">כניסה למערכת</button>
             <button style="background: none; border: none; color: #777; margin-top: 10px; text-decoration: underline;" onclick="location.reload()">חזרה</button>
         </div>
-    </div>
+
+    </div> <!-- סגירת עטיפת ההתחברות -->
 
     <!-- האפליקציה של האדמין -->
     <!-- כאן תיקנתי את ה-height בחזרה ל-100% במקום 100vh -->
@@ -492,13 +497,15 @@
             });
         }
     }
+    
     // ===============================================
-    // התחברות מאובטחת למנהלת ואימות SMS
+    // התחברות מאובטחת למנהלת (Custom Token via Pulseem)
     // ===============================================
-    let pendingAdminPhone = null; // משתנה גלובלי לשמירת מספר הטלפון המקליד
+    const auth = firebase.auth();
+    let pendingAdminPhone = null;
 
-    window.requestAdminOtp = async function() {
-        const phone = document.getElementById('adminPhoneInput').value.trim();
+window.requestAdminOtp = async function() {
+        let phone = document.getElementById('adminPhoneInput').value.trim();
         if(!phone || phone.length < 9) {
             alert("נא להזין מספר טלפון חוקי");
             return;
@@ -508,8 +515,7 @@
         btn.innerText = "מוודא הרשאות..."; btn.disabled = true;
 
         try {
-            // בדיקה מול הענן האם המספר מורשה להיות מנהל
-            let actualAdminPhone = "0501234567"; // ברירת מחדל אם אין בענן
+            let actualAdminPhone = "0501234567"; // ברירת מחדל
             const doc = await db.collection('settings').doc('adminConfig').get();
             if (doc.exists && doc.data().adminPhone) {
                 actualAdminPhone = doc.data().adminPhone;
@@ -517,42 +523,43 @@
                 await db.collection('settings').doc('adminConfig').set({ adminPhone: actualAdminPhone });
             }
 
-            if(phone !== actualAdminPhone) { 
+            let cleanPhone = phone.replace('-', '');
+
+            if(cleanPhone !== actualAdminPhone.replace('-', '')) { 
                 alert("❌ מס' לא מורשה. הגישה נדחתה."); 
                 btn.innerText = "שלחי לי קוד ב-SMS"; btn.disabled = false;
                 return; 
             }
             
-            // שומרים את המספר כדי שהפונקציה של האימות תדע את מי לבדוק
-            pendingAdminPhone = phone;
-            
+            pendingAdminPhone = cleanPhone;
             btn.innerText = "שולח קוד...";
+            
             const sendOtpSms = functions.httpsCallable('sendOtpSms');
-            await sendOtpSms({ phone: phone });
+            const result = await sendOtpSms({ phone: cleanPhone });
             
-            document.getElementById('adminPhoneStep').style.display = 'none';
-            document.getElementById('adminOtpStep').style.display = 'block';
-            
-            // פוקוס אוטומטי על הקובייה הראשונה
-            const firstOtpInput = document.querySelector('.admin-otp');
-            if(firstOtpInput) firstOtpInput.focus();
-
+            if (result.data && result.data.success) {
+                document.getElementById('adminPhoneStep').style.display = 'none';
+                document.getElementById('adminOtpStep').style.display = 'block';
+                
+                const firstOtpInput = document.querySelector('.admin-otp');
+                if(firstOtpInput) firstOtpInput.focus();
+            } else {
+                alert("שגיאה בשליחת הודעה דרך השרת.");
+            }
         } catch (error) {
             console.error(error);
-            alert("שגיאה במערכת, נא לנסות שוב.");
+            alert("שגיאה בשליחת הודעה, נסי לרענן את העמוד.");
         } finally {
             btn.innerText = "שלחי לי קוד ב-SMS"; btn.disabled = false;
         }
     };
 
     window.verifyAdminOtp = async function(e) {
-        // בוחר רק את קוביות הקוד שיש להן את הקלאס admin-otp
         const adminOtpInputs = document.querySelectorAll('.admin-otp'); 
-        
         let enteredCode = Array.from(adminOtpInputs).map(i => i.value).join('');
         
-        if (enteredCode.length !== 4) { 
-            alert("אנא הזיני 4 ספרות בדיוק."); 
+        if (enteredCode.length !== 6) { 
+            alert("אנא הזיני 6 ספרות בדיוק."); 
             return; 
         }
         
@@ -570,22 +577,27 @@
         }
 
         try {
-            const otpDoc = await db.collection('otps').doc(pendingAdminPhone).get();
-            if (otpDoc.exists && otpDoc.data().code === enteredCode) {
+            // השרת בודק את הקוד, מחזיר לנו טוקן מאובטח!
+            const verifyOtpFunc = functions.httpsCallable('verifyOtpAndLogin');
+            const result = await verifyOtpFunc({ phone: pendingAdminPhone, code: enteredCode });
+            
+            if (result.data && result.data.success) {
+                // התחברות ל-Firebase Auth עם הטוקן שלנו
+                await auth.signInWithCustomToken(result.data.token);
+
                 localStorage.setItem('adminLoggedIn', 'true');
-                
                 document.getElementById('adminAuthScreen').style.display = 'none';
                 document.getElementById('adminAppWrapper').style.display = 'flex';
-                
                 loadAllAdminData();
             } else {
-                alert("❌ הקוד שגוי. נסי שוב.");
+                alert("❌ הקוד שגוי או פג תוקף. נסי שוב.");
                 adminOtpInputs.forEach(i => i.value = '');
                 if(adminOtpInputs.length > 0) adminOtpInputs[0].focus();
             }
+            
         } catch (error) {
             console.error("Admin OTP Error:", error);
-            alert("שגיאה בהתחברות למערכת.");
+            alert("שגיאת רשת מול השרת.");
         } finally {
             if (btn) {
                 btn.innerText = originalText;
@@ -593,7 +605,7 @@
             }
         }
     };
-
+    
     // ==========================================
     // קפיצה אוטומטית בין קוביות הקוד במסך אדמין
     // ==========================================

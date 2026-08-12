@@ -10,6 +10,8 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// הפעלת מערכת ההזדהות (לקבלת טוקנים מהשרת)
+const auth = firebase.auth();
 const functions = firebase.functions();
 
 let currentUserPhone = null;
@@ -213,48 +215,47 @@ if (savedUser) { listenToCurrentUser(savedUser.phone); } else { showScreen(login
 let pendingUserDetails = null;
 
 // ==========================================
-// בקשת SMS אמיתי - עם עדכון פניה לשרת וטיפול שגיאות
+// בקשת SMS להתחברות לקוחה דרך השרת (Pulseem)
 // ==========================================
 document.getElementById('requestOtpBtn')?.addEventListener('click', async () => {
-  const nameInput = document.getElementById('loginName')?.value.trim() || ""; 
-  const phoneInput = document.getElementById('loginPhone')?.value.trim() || "";
-  
-  // הורדנו את חסימת השפה העברית למקרה שזה עשה בעיות בשקט
-  if (nameInput.length < 2) { alert("❌ אנא הכניסי שם (לפחות 2 תווים)."); return; }
-  if (!/^05\d-?\d{7}$/.test(phoneInput)) { alert("❌ אנא הכניסי מספר טלפון נייד ישראלי תקין."); return; }
-  
-  pendingUserDetails = { name: nameInput, phone: phoneInput };
-  const btn = document.getElementById('requestOtpBtn');
-  btn.innerText = "שולח הודעה...";
-  btn.disabled = true;
+    const nameInput = document.getElementById('loginName')?.value.trim() || ""; 
+    let phoneInput = document.getElementById('loginPhone')?.value.trim() || "";
+    
+    if (nameInput.length < 2) { alert("❌ אנא הכניסי שם (לפחות 2 תווים)."); return; }
+    if (!/^05\d-?\d{7}$/.test(phoneInput)) { alert("❌ אנא הכניסי מספר טלפון נייד ישראלי תקין."); return; }
+    
+    let cleanPhone = phoneInput.replace('-', '');
+    pendingUserDetails = { name: nameInput, phone: cleanPhone };
+    
+    const btn = document.getElementById('requestOtpBtn');
+    btn.innerText = "שולח הודעה...";
+    btn.disabled = true;
 
-  try {
-      const sendOtpSms = functions.httpsCallable('sendOtpSms');
-      const result = await sendOtpSms({ phone: phoneInput });
-      
-      // בודקים שהשרת אישר שההודעה נשלחה בהצלחה
-      if (result.data.success) {
-          document.getElementById('loginFormSection').style.display = 'none'; 
-          document.getElementById('otpFormSection').style.display = 'block'; 
-          document.getElementById('displayOtpPhone').innerText = phoneInput;
-          
-          // מקפיץ פוקוס לקובייה הראשונה אוטומטית
-          const firstOtpInput = document.querySelector('.otp-digit');
-          if(firstOtpInput) firstOtpInput.focus();
-      } else {
-          alert("❌ שגיאה בשליחת ההודעה: " + (result.data.error || "לא ידוע"));
-      }
-  } catch (error) {
-      console.error(error);
-      alert("שגיאה בתקשורת עם השרת. אנא נסי שוב בעוד דקה.");
-  } finally {
-      btn.innerText = "שלחי לי קוד ב-SMS";
-      btn.disabled = false;
-  }
+    try {
+        const sendOtpSms = functions.httpsCallable('sendOtpSms');
+        const result = await sendOtpSms({ phone: cleanPhone });
+        
+        if (result.data && result.data.success) {
+            document.getElementById('loginFormSection').style.display = 'none'; 
+            document.getElementById('otpFormSection').style.display = 'block'; 
+            document.getElementById('displayOtpPhone').innerText = cleanPhone;
+            
+            const firstOtpInput = document.querySelector('.otp-digit');
+            if(firstOtpInput) firstOtpInput.focus();
+        } else {
+            alert("❌ שגיאה בשליחת ההודעה מול השרת.");
+        }
+    } catch (error) {
+        console.error("Pulseem Error:", error);
+        alert("❌ שגיאת תקשורת מול השרת.");
+    } finally {
+        btn.innerText = "שלחי לי קוד ב-SMS";
+        btn.disabled = false;
+    }
 });
 
 // ==========================================
-// קפיצה אוטומטית לקוביות בצד הלקוח (הקוד החכם!)
+// קפיצה אוטומטית לקוביות בצד הלקוח
 // ==========================================
 const otpInputs = document.querySelectorAll('.otp-digit');
 otpInputs.forEach((input, index) => { 
@@ -280,11 +281,11 @@ window.cancelOtp = function() {
 };
 
 // ==========================================
-// אימות ה-OTP מול מסד הנתונים
+// אימות ה-OTP המאובטח (Custom Token בשרת)
 // ==========================================
 document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
     let enteredCode = Array.from(otpInputs).map(i => i.value).join('');
-    if (enteredCode.length !== 4) { alert("אנא הזיני 4 ספרות"); return; }
+    if (enteredCode.length !== 6) { alert("אנא הזיני את כל 6 הספרות"); return; }
     
     if (!pendingUserDetails || !pendingUserDetails.phone) {
         alert("שגיאה במערכת, אנא חזרי אחורה והקלידי את המספר מחדש.");
@@ -294,17 +295,29 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
     
     const phone = pendingUserDetails.phone;
     const btn = document.getElementById('verifyOtpBtn');
-    btn.innerText = "מאמת..."; btn.disabled = true;
+    btn.innerText = "מאמת מול השרת..."; btn.disabled = true;
 
     try {
-        const otpDoc = await db.collection('otps').doc(phone).get();
+        // השרת בודק את הקוד, ומחזיר טוקן מאובטח!
+        const verifyOtpFunc = functions.httpsCallable('verifyOtpAndLogin');
+        const result = await verifyOtpFunc({ phone: phone, code: enteredCode });
         
-        if (otpDoc.exists && otpDoc.data().code === enteredCode) {
+        if (result.data && result.data.success) {
+            // התחברות ל-Firebase Auth עם הטוקן מהשרת
+            await auth.signInWithCustomToken(result.data.token);
+            
             const userDoc = await db.collection("users").doc(phone).get();
             let userToSave;
             if (userDoc.exists) {
                 userToSave = userDoc.data();
-                if (userToSave.status === 'blocked') { alert("חשבונך נחסם. 🚫"); cancelOtp(); btn.innerText = "אימות וכניסה"; btn.disabled = false; return; }
+                if (userToSave.status === 'blocked') { 
+                    alert("חשבונך נחסם. 🚫"); 
+                    cancelOtp(); 
+                    btn.innerText = "אימות וכניסה"; 
+                    btn.disabled = false; 
+                    auth.signOut();
+                    return; 
+                }
             } else {
                 userToSave = { name: pendingUserDetails.name, phone: phone, status: 'pending' };
                 await db.collection("users").doc(phone).set(userToSave);
@@ -313,9 +326,9 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
             localStorage.setItem('currentUser', JSON.stringify(userToSave));
             listenToCurrentUser(phone);
         } else {
-            alert("❌ הקוד שהזנת שגוי, אנא נסי שוב.");
+            alert("❌ הקוד שהזנת שגוי או פג תוקף. אנא נסי שוב.");
             otpInputs.forEach(i => i.value = '');
-            otpInputs[0].focus();
+            if(otpInputs.length > 0) otpInputs[0].focus();
         }
     } catch (error) {
         console.error("Verification error:", error);
