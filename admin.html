@@ -590,7 +590,7 @@ window.requestAdminOtp = async function() {
                 document.getElementById('adminAppWrapper').style.display = 'flex';
                 loadAllAdminData();
             } else {
-                alert("❌ הקוד שגוי או פג תוקף. נסי שוב.");
+                alert("❌ שגיאה מהשרת: " + result.data.error);
                 adminOtpInputs.forEach(i => i.value = '');
                 if(adminOtpInputs.length > 0) adminOtpInputs[0].focus();
             }

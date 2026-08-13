@@ -326,7 +326,7 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
             localStorage.setItem('currentUser', JSON.stringify(userToSave));
             listenToCurrentUser(phone);
         } else {
-            alert("❌ הקוד שהזנת שגוי או פג תוקף. אנא נסי שוב.");
+            alert("❌ שגיאה מהשרת: " + result.data.error);
             otpInputs.forEach(i => i.value = '');
             if(otpInputs.length > 0) otpInputs[0].focus();
         }
