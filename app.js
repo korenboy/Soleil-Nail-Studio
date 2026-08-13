@@ -243,7 +243,7 @@ document.getElementById('requestOtpBtn')?.addEventListener('click', async () => 
             const firstOtpInput = document.querySelector('.otp-digit');
             if(firstOtpInput) firstOtpInput.focus();
         } else {
-            alert("❌ שגיאה בשליחת ההודעה מול השרת.");
+            alert("❌ " + (result.data.error || "שגיאה בשליחת ההודעה מול השרת."));    
         }
     } catch (error) {
         console.error("Pulseem Error:", error);

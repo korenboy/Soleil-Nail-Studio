@@ -65,18 +65,27 @@
         }
     }
 
-    // ====== פונקציות ה-SMS מול האפליקציה (עם פתרון ה-CORS) ======
+    // ====== פונקציות ה-SMS מול האפליקציה (גרסה מחוזקת ומוגנת) ======
 
     exports.sendOtpSms = onCall({ cors: true, invoker: "public" }, async (request) => {
         try {
             const phone = request.data.phone || request.data.phoneNumber;
             if (!phone) throw new Error("No phone number received");
 
-            // שינינו ל-6 ספרות!
+            const otpRef = db.collection('otps').doc(phone);
+            const existing = await otpRef.get();
+            
+            // הגנת ספאם: חובה לחכות דקה שלמה בין בקשת SMS אחת לשנייה!
+            if (existing.exists && Date.now() - (existing.data().timestamp?.toMillis() || 0) < 60000) {
+                return { success: false, error: "אנא המתיני דקה לפני בקשת קוד נוסף" };
+            }
+
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             
-            await db.collection('otps').doc(phone).set({ 
+            // שומרים את הקוד, מאפסים את מונה הניסיונות ל-0, ושומרים שעה מדויקת
+            await otpRef.set({ 
                 code: otp, 
+                attempts: 0, 
                 timestamp: admin.firestore.FieldValue.serverTimestamp() 
             });
 
@@ -92,27 +101,49 @@
         }
     });
 
-    // 🌟 פונקציית האימות החדשה והמאובטחת בצד השרת 🌟
+    // 🌟 פונקציית האימות המאובטחת עם הגנת פריצות ותג מנהלת 🌟
     exports.verifyOtpAndLogin = onCall({ cors: true, invoker: "public" }, async (request) => {
         try {
             const { phone, code } = request.data;
             if (!phone || !code) throw new Error("Missing phone or code");
 
-            // השרת בודק את הקוד מול המסד, במקום שהלקוח יעשה את זה
             const otpRef = db.collection('otps').doc(phone);
             const doc = await otpRef.get();
 
-            if (!doc.exists || doc.data().code !== code) {
-                return { success: false, error: "Invalid or expired code" };
+            if (!doc.exists) return { success: false, error: "לא נשלח קוד למספר הזה" };
+            
+            const data = doc.data();
+            
+            // הגנת תוקף: הקוד יפוג אוטומטית אחרי 5 דקות
+            if (Date.now() - (data.timestamp?.toMillis() || 0) > 5 * 60 * 1000) {
+                return { success: false, error: "הקוד פג תוקף, אנא בקשי חדש" };
+            }
+            
+            // הגנת פריצה (Brute-force): מקסימום 5 ניסיונות שגויים
+            if ((data.attempts || 0) >= 5) {
+                return { success: false, error: "יותר מדי ניסיונות שגויים. בקשי קוד חדש." };
+            }
+
+            // אם הלקוחה טעתה בקוד - מעלים את מונה הניסיונות ב-1
+            if (data.code !== code) {
+                await otpRef.update({ attempts: admin.firestore.FieldValue.increment(1) });
+                return { success: false, error: "קוד שגוי" };
             }
 
             // הקוד נכון! מוחקים אותו כדי שלא ישמש פעמיים
             await otpRef.delete();
 
-            // המרת ההצלחה לטוקן מאובטח רשמי של פיירבייס!
-            const customToken = await admin.auth().createCustomToken(phone);
+            // 👑 בדיקה האם המספר הזה שייך למנהלת (נטלי) 👑
+            let isAdmin = false;
+            const adminConfig = await db.collection('settings').doc('adminConfig').get();
+            if (adminConfig.exists && adminConfig.data().adminPhone === phone) {
+                isAdmin = true;
+            }
 
-            return { success: true, token: customToken };
+            // המרת ההצלחה לטוקן מאובטח רשמי של פיירבייס, ו"הדבקת" תג מנהלת במידת הצורך!
+            const customToken = await admin.auth().createCustomToken(phone, { admin: isAdmin });
+
+            return { success: true, token: customToken, isAdmin: isAdmin };
         } catch (error) {
             console.error("ERROR IN VERIFY:", error);
             return { success: false, error: error.message };

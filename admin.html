@@ -472,6 +472,17 @@
     const db = firebase.firestore();
     const functions = firebase.functions(); // הפעלת חיבור לשרת!!
 
+    // פונקציה לניקוי קוד זדוני (XSS Escape)
+    function esc(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     if (localStorage.getItem('adminLoggedIn') === 'true') {
         document.getElementById('adminAuthScreen').style.display = 'none';
         document.getElementById('adminAppWrapper').style.display = 'flex';
@@ -544,7 +555,7 @@ window.requestAdminOtp = async function() {
                 const firstOtpInput = document.querySelector('.admin-otp');
                 if(firstOtpInput) firstOtpInput.focus();
             } else {
-                alert("שגיאה בשליחת הודעה דרך השרת.");
+                alert("❌ " + (result.data.error || "שגיאה בשליחת הודעה דרך השרת."));
             }
         } catch (error) {
             console.error(error);
@@ -946,8 +957,9 @@ window.closeManualBookModal = function() {
             if(!app) return; let isPast = false; if(app.fullDate && app.fullDate < todayStr) isPast = true; else if (app.fullDate === todayStr) { const [h, m] = (app.time || "00:00").split(':').map(Number); if ((h * 60 + m) < currentMinutes) isPast = true; }
             let confirmedText = app.clientConfirmed ? `<span style="color:#28a745; font-size:12px;">✅ אישרה</span>` : '';
             let reminderStatus = app.reminderSmsSent ? '<span style="font-size: 13px; color: #28a745; background: #e8f5e9; padding: 2px 8px; border-radius: 10px; margin-right: 8px;">✉️ תזכורת נשלחה</span>' : '';
-let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${app.treatment} ${confirmedText}</div>`;
-if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color: #555; background: #fdfbf7; border: 1px dashed #C2A878; padding: 8px; border-radius: 4px;">📝 <b>הערות:</b> ${app.notes}</div>`; }            
+            // כאן ההגנה פועלת! הוספנו esc()
+            let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${esc(app.clientPhone)}')">${esc(app.clientName)}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${esc(app.treatment)} ${confirmedText}</div>`;
+            if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color: #555; background: #fdfbf7; border: 1px dashed #C2A878; padding: 8px; border-radius: 4px;">📝 <b>הערות:</b> ${esc(app.notes)}</div>`; }            
             if (app.status === 'pending') {
                 pendingList.innerHTML += html + `<div style="display:flex; gap:5px;"><button class="btn-approve" onclick="approveApp('${app.id}')">אשרי תור</button><button class="btn-edit" onclick="openEditAppModal('${app.id}')">✏️</button><button class="btn-block" onclick="cancelApp('${app.id}')">ביטול</button></div></div>`;
             } else if (app.status === 'approved') {
@@ -956,7 +968,7 @@ if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color
             }
         });
     }
-
+    
     function renderWaitlistAdmin() {
     const list = document.getElementById('adminWaitlistList');
     if(!list) return;
@@ -965,7 +977,7 @@ if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color
     // מיון לפי תאריכים
     waitlist.sort((a,b) => a.fullDate.localeCompare(b.fullDate));
     const todayStr = new Date().toISOString().split('T')[0];
-    waitlist = waitlist.filter(w => w.fullDate >= todayStr); // מציג רק להיום והלאה
+    waitlist = waitlist.filter(w => w.fullDate >= todayStr); 
     
     list.innerHTML = '';
     if(waitlist.length === 0) {
@@ -975,18 +987,19 @@ if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color
     
     waitlist.forEach(w => {
         let prefs = w.preferences ? w.preferences.join(', ') : 'כל היום';
+        // הגנת XSS
         list.innerHTML += `
         <div class="user-card" style="border-right: 4px solid #856404;">
             <div style="display:flex; justify-content:space-between;">
-                <strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${w.clientPhone}')">${w.clientName}</span></strong>
+                <strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${esc(w.clientPhone)}')">${esc(w.clientName)}</span></strong>
                 <span style="color:#856404; font-weight:bold;">${w.date}</span>
             </div>
             <div style="font-size:13px; color:#555; margin-bottom:10px;">
-                ${w.treatment} <br>
-                <strong>מעדיפה ב:</strong> ${prefs}
+                ${esc(w.treatment)} <br>
+                <strong>מעדיפה ב:</strong> ${esc(prefs)}
             </div>
             <div style="display:flex; gap:5px;">
-                <button class="btn-submit" style="background:#25D366; color:white; padding:8px;" onclick="window.open('https://wa.me/972${w.clientPhone.substring(1)}?text=היי ${w.clientName}, התפנה לי תור בקליניקה ב-${w.date}! האם תרצי שאקבע לך?', '_blank')">WhatsApp</button>
+                <button class="btn-submit" style="background:#25D366; color:white; padding:8px;" onclick="window.open('https://wa.me/972${esc(w.clientPhone).substring(1)}?text=היי ${esc(w.clientName)}, התפנה לי תור בקליניקה ב-${w.date}! האם תרצי שאקבע לך?', '_blank')">WhatsApp</button>
                 <button class="btn-block" onclick="removeFromWaitlist('${w.id}')">הסר מרשימה</button>
             </div>
         </div>`;
@@ -1054,12 +1067,27 @@ window.removeFromWaitlist = function(id) {
         let titleStr = ''; if(calViewMode === 'month') titleStr = `${monthNames[month]} ${year}`; else if(calViewMode === 'week') { let endOfWeek = new Date(currentCalDate); endOfWeek.setDate(currentCalDate.getDate() + (6 - currentCalDate.getDay())); titleStr = `${date}-${endOfWeek.getDate()} ב${monthNames[month]}`; } else titleStr = `${date} ב${monthNames[month]}`;
         document.getElementById('monthYearLabel').innerText = titleStr;
 
-        let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
+        let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; 
+        let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
+
+        // 🚀 מביאים את המהירות: מכינים מפה של ספירת התורים לפי תאריכים בפעם אחת בלבד!
+        const appsCountMap = {};
+        allApps.forEach(a => {
+            if (a && a.status !== 'canceled' && a.fullDate) {
+                appsCountMap[a.fullDate] = (appsCountMap[a.fullDate] || 0) + 1;
+            }
+        });
+
+        // מפה מהירה גם למשמרות
+        const shiftsMap = {};
+        adminShifts.forEach(s => {
+            if (s && s.date) shiftsMap[s.date] = s;
+        });
 
         if (calViewMode === 'day') {
             if(headers) headers.style.display = 'none'; grid.style.gridTemplateColumns = '1fr';
             let fullDateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`; 
-            let shift = adminShifts.find(s => s && s.date === fullDateStr); 
+            let shift = shiftsMap[fullDateStr]; 
             let dayApps = allApps.filter(a => a && a.status !== 'canceled' && a.fullDate === fullDateStr).sort((a,b)=>a.time.localeCompare(b.time));
             
             let html = `<div style="background:#fafafa; padding:15px; border-radius:12px; border:1px solid #eee;">`;
@@ -1080,8 +1108,8 @@ window.removeFromWaitlist = function(id) {
                     html += `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:15px; border-right:5px solid #C2A878; background:#fff; border-radius:8px; margin-bottom:10px; box-shadow:0 3px 10px rgba(0,0,0,0.04); min-height:${blockHeight}px;">
                         <div style="flex:1;">
                             <strong style="color:#111; font-size:16px;">${app.time} - ${endTimeStr}</strong> 
-                            <strong style="font-size:16px; text-decoration:underline; cursor:pointer; color:#007bff; margin-right:10px;" onclick="openClientDetails('${app.clientPhone}')">${app.clientName}</strong>
-                            <br><span style="font-size:14px; color:#555; display:block; margin-top:8px;">${app.treatment} (${dur} דק')</span>
+                            <strong style="font-size:16px; text-decoration:underline; cursor:pointer; color:#007bff; margin-right:10px;" onclick="openClientDetails('${esc(app.clientPhone)}')">${esc(app.clientName)}</strong>
+                            <br><span style="font-size:14px; color:#555; display:block; margin-top:8px;">${esc(app.treatment)} (${dur} דק')</span>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:8px;">
                             <button class="btn-edit" style="padding:6px 12px; font-size:13px;" onclick="openEditAppModal('${app.id}')">✏️ ערוך שעות</button>
@@ -1093,10 +1121,47 @@ window.removeFromWaitlist = function(id) {
             html += `</div>`; grid.innerHTML = html;
         } else {
             if(headers) headers.style.display = 'grid'; grid.style.gridTemplateColumns = 'repeat(7, 1fr)';
-            if (calViewMode === 'month') { const firstDayIndex = new Date(year, month, 1).getDay(); const daysInMonth = new Date(year, month + 1, 0).getDate(); for(let i = 0; i < firstDayIndex; i++) { grid.appendChild(document.createElement('div')); } for(let d = 1; d <= daysInMonth; d++) { createCell(year, month, d); } } else if (calViewMode === 'week') { let currDayOfWeek = currentCalDate.getDay(); let startOfWeek = new Date(currentCalDate); startOfWeek.setDate(currentCalDate.getDate() - currDayOfWeek); for(let i=0; i<7; i++) { let d = new Date(startOfWeek); d.setDate(startOfWeek.getDate() + i); createCell(d.getFullYear(), d.getMonth(), d.getDate()); } }
+            if (calViewMode === 'month') { 
+                const firstDayIndex = new Date(year, month, 1).getDay(); 
+                const daysInMonth = new Date(year, month + 1, 0).getDate(); 
+                for(let i = 0; i < firstDayIndex; i++) { grid.appendChild(document.createElement('div')); } 
+                for(let d = 1; d <= daysInMonth; d++) { createCell(year, month, d, shiftsMap, appsCountMap); } 
+            } else if (calViewMode === 'week') { 
+                let currDayOfWeek = currentCalDate.getDay(); 
+                let startOfWeek = new Date(currentCalDate); 
+                startOfWeek.setDate(currentCalDate.getDate() - currDayOfWeek); 
+                for(let i=0; i<7; i++) { 
+                    let d = new Date(startOfWeek); 
+                    d.setDate(startOfWeek.getDate() + i); 
+                    createCell(d.getFullYear(), d.getMonth(), d.getDate(), shiftsMap, appsCountMap); 
+                } 
+            }
         }
     }
-    function createCell(y, m, d) { let fullDateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; let allApps = JSON.parse(localStorage.getItem('myAppointments')) || []; let shift = adminShifts.find(s => s && s.date === fullDateStr); let dayApps = allApps.filter(a => a && a.status !== 'canceled' && a.fullDate === fullDateStr); let cell = document.createElement('div'); cell.className = `calendar-cell ${shift ? 'has-shift' : ''}`; cell.id = `cal-cell-${fullDateStr}`; cell.innerHTML = `<div class="cell-date">${d}</div><div class="holiday-container"></div>${dayApps.length > 0 ? `<div style="background:#28a745; color:#fff; padding:2px; border-radius:4px; font-size:10px; margin-bottom:2px;">${dayApps.length} תורים</div>` : ''}${shift ? `<div class="shift-badge">${shift.start}</div>` : ''}`; cell.onclick = () => { calViewMode = 'day'; currentCalDate = new Date(y, m, d); document.getElementById('calViewSelector').value = 'day'; renderCalendar(); }; document.getElementById('calendarGrid').appendChild(cell); }
+
+    // ⚡ פונקציית יצירת קובייה מהירה במיוחד
+    function createCell(y, m, d, shiftsMap, appsCountMap) { 
+        let fullDateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; 
+        
+        // שליפת הנתונים ישירות מהמפה - בלי לולאות מיותרות!
+        let shift = shiftsMap[fullDateStr]; 
+        let appsCount = appsCountMap[fullDateStr] || 0; 
+        
+        let cell = document.createElement('div'); 
+        cell.className = `calendar-cell ${shift ? 'has-shift' : ''}`; 
+        cell.id = `cal-cell-${fullDateStr}`; 
+        cell.innerHTML = `<div class="cell-date">${d}</div><div class="holiday-container"></div>${appsCount > 0 ? `<div style="background:#28a745; color:#fff; padding:2px; border-radius:4px; font-size:10px; margin-bottom:2px;">${appsCount} תורים</div>` : ''}${shift ? `<div class="shift-badge">${shift.start}</div>` : ''}`; 
+        
+        cell.onclick = () => { 
+            calViewMode = 'day'; 
+            currentCalDate = new Date(y, m, d); 
+            document.getElementById('calViewSelector').value = 'day'; 
+            renderCalendar(); 
+        }; 
+        
+        document.getElementById('calendarGrid').appendChild(cell); 
+    }
+    
     window.goToToday = function() { currentCalDate = new Date(); renderCalendar(); };
     window.openWeeklyTemplateModal = function() { document.getElementById('weeklyTemplateModal').classList.add('active'); };
     window.generateWeeklyShifts = async function() {
