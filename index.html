@@ -156,10 +156,11 @@
         </div>
       </div>
 
-<div class="bottom-action" id="confirmTimeAction" style="display: none;">
-    <textarea id="clientNotes" class="form-input" placeholder="הערות לנטלי (אופציונלי)..." style="height: 60px; resize: none; margin-bottom: 10px;"></textarea>
-    <button class="primary-btn" id="confirmTimeBtn">המשך לאישור תקנון</button>
-</div>
+      <div class="bottom-action" id="confirmTimeAction" style="display: none;">
+          <textarea id="clientNotes" class="form-input" placeholder="הערות לנטלי (אופציונלי)..." style="height: 60px; resize: none; margin-bottom: 10px;"></textarea>
+          <button class="primary-btn" id="confirmTimeBtn">המשך לאישור תקנון</button>
+      </div>
+    </div>
 
     <div class="modal-overlay" id="termsModal">
       <div class="modal-content">
@@ -181,7 +182,8 @@
       </div>
     </div>
 
-    <div id="summaryScreen" class="screen-container" style="display: none; align-items: center; justify-content: center; text-align: center;">
+    <!-- ✨ התיקון הקריטי: הוספנו פה flex-direction: column כדי למנוע את קריסת הרקע ✨ -->
+    <div id="summaryScreen" class="screen-container" style="display: none; align-items: center; justify-content: center; text-align: center; flex-direction: column;">
       <div class="success-icon" style="font-size: 60px; color: #C2A878; margin-bottom: 20px;">✔️</div>
       <h2 style="margin-bottom: 10px;">התור שלך נקבע!</h2>
       <p style="color: #777; margin-bottom: 30px;">איזה כיף, נטלי מחכה לך.</p>
@@ -190,13 +192,12 @@
       <button class="primary-btn" id="backToHomeBtn">חזרה למסך הבית</button>
     </div>
 
-  </div>
-</div>
+  </div> <!-- סגירה של app-screen -->
+</div> <!-- סגירה של phone-mockup -->
 
 <script src="app.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", () => {
-      // 1. הגנה מפני קריסות - זיהוי אייפון והצגת באנר
       try {
           const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
           const isStandalone = () => ('standalone' in window.navigator) && (window.navigator.standalone);
@@ -206,12 +207,10 @@
           }
       } catch(e) { console.error("Banner check failed", e); }
 
-      // 2. קריאת הקישור ופעולות ניתוב חכמות
       const urlParams = new URLSearchParams(window.location.search);
       const action = urlParams.get('action');
       const actionAppId = urlParams.get('id');
 
-      // מצב א': הגעה מהתזכורת האוטומטית - צפייה בלבד
       if (action === 'view_appointments') {
           sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
           window.history.replaceState(null, null, window.location.pathname);
@@ -226,12 +225,10 @@
           }
       }
 
-      // מצב ב': הגעה מהתזכורת הידנית - אישור אוטומטי ומעבר למסך
       if (action === 'confirm_arrival' && actionAppId) {
           sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
           window.history.replaceState(null, null, window.location.pathname);
 
-          // אישור מול פיירבייס בצורה בטוחה ומהירה
           firebase.firestore().collection("appointments").doc(actionAppId.toString()).update({
               clientConfirmed: true,
               statusText: "אישרה הגעה ✅"

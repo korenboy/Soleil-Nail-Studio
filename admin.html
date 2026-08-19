@@ -168,7 +168,6 @@
                 </div>
             </section>
 
-            <!-- מסך ניהול טיפולים (חדש!) -->
             <section id="treatmentsScreen" class="admin-screen">
                 <h2 style="margin-top:0;">ניהול טיפולים 🎁</h2>
                 
@@ -472,15 +471,14 @@
     const db = firebase.firestore();
     const functions = firebase.functions(); // הפעלת חיבור לשרת!!
 
-    // פונקציה לניקוי קוד זדוני (XSS Escape)
+    // 🌟 התיקון הקריטי: הגדרת ה-auth חייבת להיות פה למעלה! 🌟
+    const auth = firebase.auth(); 
+    let pendingAdminPhone = null;
+
+    // פונקציה לניקוי קוד זדוני (XSS Escape) שהוספנו מוקדם יותר
     function esc(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
     if (localStorage.getItem('adminLoggedIn') === 'true') {
@@ -488,7 +486,12 @@
         document.getElementById('adminAppWrapper').style.display = 'flex';
         const currentMonthStr = new Date().toISOString().substring(0, 7);
         document.getElementById('finMonthSelect').value = currentMonthStr;
-        initAdminListeners();
+        
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                initAdminListeners();
+            }
+        });
         
         // --- קוד חדש ללכידת הלחיצה מטלגרם ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -508,14 +511,8 @@
             });
         }
     }
-    
-    // ===============================================
-    // התחברות מאובטחת למנהלת (Custom Token via Pulseem)
-    // ===============================================
-    const auth = firebase.auth();
-    let pendingAdminPhone = null;
 
-window.requestAdminOtp = async function() {
+    window.requestAdminOtp = async function() {
         let phone = document.getElementById('adminPhoneInput').value.trim();
         if(!phone || phone.length < 9) {
             alert("נא להזין מספר טלפון חוקי");
@@ -569,51 +566,37 @@ window.requestAdminOtp = async function() {
         const adminOtpInputs = document.querySelectorAll('.admin-otp'); 
         let enteredCode = Array.from(adminOtpInputs).map(i => i.value).join('');
         
-        if (enteredCode.length !== 6) { 
-            alert("אנא הזיני 6 ספרות בדיוק."); 
-            return; 
-        }
-        
-        if (!pendingAdminPhone) {
-            alert("שגיאה: חסר מספר טלפון. רענני את העמוד ונסי שוב.");
-            return;
-        }
+        if (enteredCode.length !== 6) { alert("אנא הזיני 6 ספרות בדיוק."); return; }
+        if (!pendingAdminPhone) { alert("שגיאה: חסר מספר טלפון. רענני את העמוד ונסי שוב."); return; }
 
         const btn = (e && e.target) ? e.target : document.getElementById('verAdminBtn');
         let originalText = "כניסה למערכת";
-        if (btn) {
-            originalText = btn.innerText;
-            btn.innerText = "מאמת..."; 
-            btn.disabled = true;
-        }
+        if (btn) { originalText = btn.innerText; btn.innerText = "מאמת..."; btn.disabled = true; }
 
         try {
-            // השרת בודק את הקוד, מחזיר לנו טוקן מאובטח!
             const verifyOtpFunc = functions.httpsCallable('verifyOtpAndLogin');
             const result = await verifyOtpFunc({ phone: pendingAdminPhone, code: enteredCode });
             
             if (result.data && result.data.success) {
-                // התחברות ל-Firebase Auth עם הטוקן שלנו
                 await auth.signInWithCustomToken(result.data.token);
 
                 localStorage.setItem('adminLoggedIn', 'true');
                 document.getElementById('adminAuthScreen').style.display = 'none';
                 document.getElementById('adminAppWrapper').style.display = 'flex';
+                
+                // 🔥 התיקון: הפעלת ההאזנה ללקוחות ותורים מיד אחרי הכניסה!
+                initAdminListeners();
                 loadAllAdminData();
             } else {
-                alert("❌ שגיאה מהשרת: " + result.data.error);
+                alert("❌ " + (result.data.error || "שגיאה מהשרת"));
                 adminOtpInputs.forEach(i => i.value = '');
                 if(adminOtpInputs.length > 0) adminOtpInputs[0].focus();
             }
-            
         } catch (error) {
             console.error("Admin OTP Error:", error);
             alert("שגיאת רשת מול השרת.");
         } finally {
-            if (btn) {
-                btn.innerText = originalText;
-                btn.disabled = false;
-            }
+            if (btn) { btn.innerText = originalText; btn.disabled = false; }
         }
     };
     
@@ -652,7 +635,12 @@ window.requestAdminOtp = async function() {
     document.addEventListener('DOMContentLoaded', setupAdminOtpJump);
     setTimeout(setupAdminOtpJump, 500);
 
-    window.logoutAdmin = function() { localStorage.removeItem('adminLoggedIn'); location.reload(); };
+    window.logoutAdmin = function() { 
+        auth.signOut().then(() => {
+            localStorage.clear(); 
+            location.reload(); 
+        });
+    };
     window.forceRefreshApp = function() { window.location.reload(true); };
 
     window.toggleAdminMenu = function() {
@@ -1850,7 +1838,7 @@ window.saveFinanceRecord = function() {
     // ==========================================
     // שמירת לקוחה ישירות מהמסך "ניהול לקוחות"
     // ==========================================
-    window.saveNewClientDirect = function() {
+        window.saveNewClientDirect = function() {
         const name = document.getElementById('addClientName').value.trim();
         const phone = document.getElementById('addClientPhone').value.trim();
 

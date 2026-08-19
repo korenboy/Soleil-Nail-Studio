@@ -133,11 +133,22 @@
             // הקוד נכון! מוחקים אותו כדי שלא ישמש פעמיים
             await otpRef.delete();
 
-            // 👑 בדיקה האם המספר הזה שייך למנהלת (נטלי) 👑
+            // 👑 בדיקה חכמה לזיהוי המנהלת (נטלי) עם נרמול טלפונים 👑
             let isAdmin = false;
             const adminConfig = await db.collection('settings').doc('adminConfig').get();
-            if (adminConfig.exists && adminConfig.data().adminPhone === phone) {
-                isAdmin = true;
+            if (adminConfig.exists) {
+                let dbAdminPhone = adminConfig.data().adminPhone || "";
+                
+                // הופך מספרים כמו +972501234567 ל-0501234567
+                let cleanDb = dbAdminPhone.replace(/[\s\-+]/g, '');
+                if (cleanDb.startsWith('972')) cleanDb = '0' + cleanDb.substring(3);
+                
+                let cleanIncoming = phone.replace(/[\s\-+]/g, '');
+                if (cleanIncoming.startsWith('972')) cleanIncoming = '0' + cleanIncoming.substring(3);
+
+                if (cleanDb === cleanIncoming) {
+                    isAdmin = true;
+                }
             }
 
             // המרת ההצלחה לטוקן מאובטח רשמי של פיירבייס, ו"הדבקת" תג מנהלת במידת הצורך!
