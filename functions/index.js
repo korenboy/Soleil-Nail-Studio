@@ -324,27 +324,38 @@ const { onCall } = require('firebase-functions/v2/https');
     });
 
     // ============================================================================
-    // אוטומציה: סריקת תורים שהסתיימו ועדכון הכנסות אוטומטי (כל שעה עגולה)
+    // אוטומציה: סריקת תורים שהסתיימו ועדכון הכנסות אוטומטי (כל שעה עגולה) - מיועל פי 100!
     // ============================================================================
     exports.autoRecordIncome = onSchedule({ schedule: '0 * * * *', timeZone: 'Asia/Jerusalem' }, async (event) => {
         try {
             const nowIL = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
+            
+            // חישוב היום הנוכחי
             const currentYear = nowIL.getFullYear();
             const currentMonth = String(nowIL.getMonth() + 1).padStart(2, '0');
             const currentDay = String(nowIL.getDate()).padStart(2, '0');
+            const todayStr = `${currentYear}-${currentMonth}-${currentDay}`;
+            
+            // חישוב של תאריך אתמול (למקרה שהשעה התחלפה ל-00:00 ותור הסתיים מאוחר)
+            const yesterdayIL = new Date(nowIL);
+            yesterdayIL.setDate(yesterdayIL.getDate() - 1);
+            const yYear = yesterdayIL.getFullYear();
+            const yMonth = String(yesterdayIL.getMonth() + 1).padStart(2, '0');
+            const yDay = String(yesterdayIL.getDate()).padStart(2, '0');
+            const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
+
             const currentHour = String(nowIL.getHours()).padStart(2, '0');
             const currentMin = String(nowIL.getMinutes()).padStart(2, '0');
-            
-            const todayStr = `${currentYear}-${currentMonth}-${currentDay}`;
             const currentTimeStr = `${currentHour}:${currentMin}`;
 
-            // 🔥 תיקון 1: מושכים רק לפי סטטוס כדי לעקוף את שגיאת האינדקס של פיירבייס
+            // 🔥 התיקון המטורף: מושכים אך ורק תורים של "היום" ושל "אתמול" במקום את כל ההיסטוריה! 🔥
             const snapshot = await db.collection('appointments')
-                .where('status', '==', 'approved')
+                .where('fullDate', 'in', [todayStr, yesterdayStr])
                 .get();
 
             if (snapshot.empty) return null;
 
+            // מושכים מחירון עדכני של טיפולים
             const treatmentsSnap = await db.collection('treatments').get();
             const prices = {};
             treatmentsSnap.forEach(doc => {
@@ -358,15 +369,16 @@ const { onCall } = require('firebase-functions/v2/https');
             snapshot.forEach(doc => {
                 const app = doc.data();
                 
-                // אם ההכנסה כבר נרשמה, מדלגים
+                // סינון בקוד: מטפלים רק בתורים מאושרים שעדיין לא נרשמו כהכנסה
+                if (app.status !== 'approved') return;
                 if (app.financeRecorded) return;
 
-                // 🔥 תיקון 2: מוודאים אישור לקוחה דרך הלינק, *או* אם נטלי קבעה לה ידנית במקום
+                // מוודאים אישור לקוחה או קביעה ידנית ע"י נטלי
                 const isConfirmed = app.clientConfirmed === true || (app.statusText && app.statusText.includes("נקבע ע\"י הקליניקה"));
                 if (!isConfirmed) return;
 
                 // בודקים אם שעת התור עברה
-                const isPastDay = app.fullDate < todayStr;
+                const isPastDay = app.fullDate < todayStr; // תמיד נכון עבור אתמול
                 const isPastTimeToday = (app.fullDate === todayStr && app.time <= currentTimeStr);
 
                 if (isPastDay || isPastTimeToday) {
@@ -391,6 +403,8 @@ const { onCall } = require('firebase-functions/v2/https');
             if (addedCount > 0) {
                 await batch.commit();
                 console.log(`Successfully recorded ${addedCount} incomes for completed appointments.`);
+            } else {
+                console.log("No new completed appointments to record.");
             }
         } catch (error) {
             console.error("Error in autoRecordIncome:", error);
