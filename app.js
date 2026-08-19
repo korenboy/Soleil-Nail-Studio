@@ -15,7 +15,9 @@ const functions = firebase.functions();
 
 let currentUserPhone = null;
 let currentUserName = null;
+let myAppsUnsubscribe = null;
 
+// האזנה למשמרות הפתוחות של נטלי
 db.collection('shifts').onSnapshot(snap => {
     let shifts = [];
     snap.forEach(doc => shifts.push(doc.data()));
@@ -25,13 +27,12 @@ db.collection('shifts').onSnapshot(snap => {
     }
 });
 
-db.collection('appointments').onSnapshot(snap => {
-    let apps = [];
-    snap.forEach(doc => apps.push(doc.data()));
-    localStorage.setItem('myAppointments', JSON.stringify(apps));
-    if(document.getElementById('myAppointmentsScreen')?.style.display !== 'none') renderMyAppointments();
+// 🔥 התיקון: מאזינים רק ל"שעות התפוסות" (ללא שמות) כדי לחשב יומן מאובטח! 🔥
+db.collection('busy_slots').onSnapshot(snap => {
+    let busy = [];
+    snap.forEach(doc => busy.push(doc.data()));
+    localStorage.setItem('busySlots', JSON.stringify(busy));
     
-    // ✨ התיקון הקריטי: מחשבים שעות מחדש רק אם באמת נמצאים עכשיו במסך בחירת שעה!
     const bookingFlow = document.getElementById('bookingFlow');
     const datetimeSection = document.getElementById('datetimeSection');
     
@@ -47,6 +48,7 @@ db.collection('appointments').onSnapshot(snap => {
     }
 });
 
+// משיכת טיפולים מהאדמין
 db.collection('treatments').onSnapshot(snap => {
     const list = document.getElementById('treatmentsList');
     if(!list) return;
@@ -89,6 +91,7 @@ db.collection('treatments').onSnapshot(snap => {
     });
 });
 
+// הגדרות עיצוב כלליות
 db.collection('settings').doc('homeConfig').onSnapshot(doc => {
     if(doc.exists) {
         localStorage.setItem('appHomeConfig', JSON.stringify(doc.data()));
@@ -176,7 +179,6 @@ function showScreen(screenToShow) {
 }
 
 let savedUser = JSON.parse(localStorage.getItem('currentUser'));
-let userUnsubscribe = null;
 
 function listenToCurrentUser(phone) {
     if(userUnsubscribe) userUnsubscribe();
@@ -192,8 +194,23 @@ function listenToCurrentUser(phone) {
             } else if (syncedUser.status === 'approved') {
                 applyHomeConfig(syncedUser.name);
                 if(mainHeader) mainHeader.style.display = 'flex';
+                
+                // 🔥 התיקון: הלקוחה מושכת *רק* את התורים של עצמה! 🔥
+                if(myAppsUnsubscribe) myAppsUnsubscribe();
+                myAppsUnsubscribe = db.collection('appointments')
+                    .where('clientPhone', '==', phone)
+                    .onSnapshot(snap => {
+                        let apps = [];
+                        snap.forEach(d => {
+                            let data = d.data();
+                            data.id = d.id;
+                            apps.push(data);
+                        });
+                        localStorage.setItem('myAppointments', JSON.stringify(apps));
+                        if(document.getElementById('myAppointmentsScreen')?.style.display !== 'none') renderMyAppointments();
+                    }, err => console.error("Appointments snapshot error:", err));
+
                 if(document.getElementById('pendingApprovalScreen')?.style.display !== 'none' || document.getElementById('loginScreen')?.style.display !== 'none') {
-                    
                     if(sessionStorage.getItem('redirectAfterLogin') === 'myAppointments') {
                         sessionStorage.removeItem('redirectAfterLogin');
                         renderMyAppointments();
@@ -225,6 +242,9 @@ if (savedUser) {
 
 let pendingUserDetails = null;
 
+// ==========================================
+// בקשת SMS דרך פולסים בשרת
+// ==========================================
 document.getElementById('requestOtpBtn')?.addEventListener('click', async () => {
     const nameInput = document.getElementById('loginName')?.value.trim() || ""; 
     let phoneInput = document.getElementById('loginPhone')?.value.trim() || "";
@@ -285,6 +305,9 @@ window.cancelOtp = function() {
     otpInputs.forEach(i => i.value = ''); 
 };
 
+// ==========================================
+// אימות ה-OTP המאובטח
+// ==========================================
 document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
     let enteredCode = Array.from(otpInputs).map(i => i.value).join('');
     if (enteredCode.length !== 6) { alert("אנא הזיני את כל 6 הספרות"); return; }
@@ -326,7 +349,7 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
             localStorage.setItem('currentUser', JSON.stringify(userToSave));
             listenToCurrentUser(phone);
         } else {
-            alert("❌ " + (result.data.error || "שגיאה מהשרת"));
+            alert("❌ שגיאה מהשרת: " + result.data.error);
             otpInputs.forEach(i => i.value = '');
             if(otpInputs.length > 0) otpInputs[0].focus();
         }
@@ -354,8 +377,7 @@ document.getElementById('menuBookAppointment')?.addEventListener('click', () => 
 function renderMyAppointments() {
   const listContainer = document.getElementById('appointmentsList'); const statsContainer = document.getElementById('myStatsContainer');
   if(!listContainer || !statsContainer) return; listContainer.innerHTML = ''; 
-  const appointments = JSON.parse(localStorage.getItem('myAppointments')) || []; 
-  const myOwnAppointments = appointments.filter(app => app && app.clientPhone === currentUserPhone);
+  const myOwnAppointments = JSON.parse(localStorage.getItem('myAppointments')) || []; 
 
   let arrived = 0, cancelMe = 0, cancelNatali = 0; const todayStr = new Date().toISOString().split('T')[0];
   myOwnAppointments.forEach(app => {
@@ -404,7 +426,7 @@ window.confirmMyArrival = function(id) {
         statusText: "אישרה הגעה ✅"
     }).then(() => {
         alert("איזה כיף, נטלי מחכה לך בקליניקה! ✨");
-    });
+    }).catch(e => alert("שגיאה באישור: " + e.message));
 };
 
 const cancelModal = document.getElementById('cancelModal'); let currentAppToCancel = null;
@@ -424,7 +446,7 @@ document.getElementById('confirmCancelBtn')?.addEventListener('click', () => {
           let app = appointments.find(a => String(a.id) === String(currentAppToCancel));
           if(app) notifyAdmin(`לקוחה הפעילה ביטול תור: ${app.clientName} (${app.date})`, 'app', app.id);
           cancelModal?.classList.remove('active');
-      });
+      }).catch(e => alert("שגיאה בביטול: " + e.message));
   }
 });
 
@@ -444,6 +466,7 @@ function renderBookingDays() {
     });
 }
 
+// פונקציות עזר לזמנים
 function timeToMins(timeStr) {
     let [h, m] = (timeStr || "00:00").split(':').map(Number);
     return h * 60 + m;
@@ -470,8 +493,10 @@ function renderBookingTimes(shift, dateFormatted) {
     let bs = shift.breakStart ? timeToMins(shift.breakStart) : -1; 
     let be = shift.breakEnd ? timeToMins(shift.breakEnd) : -1;
     
-    const allApps = JSON.parse(localStorage.getItem('myAppointments')) || []; 
-    const bookedApps = allApps.filter(a => a && a.status !== 'canceled' && a.date === dateFormatted);
+    // 🔥 התיקון: אנחנו בודקים מול השעות התפוסות הסודיות (busy_slots) בלבד 🔥
+    const busySlots = JSON.parse(localStorage.getItem('busySlots')) || []; 
+    const bookedApps = busySlots.filter(a => a && a.fullDate === shift.date);
+    
     let hasSlots = false; 
     let treatmentDuration = window.selectedTreatmentDuration || 60;
     
@@ -539,7 +564,7 @@ window.joinWaitlist = function(fullDate, displayDate) {
         try {
             notifyAdmin(`לקוחה בהמתנה ל-${displayDate}: ${currentUser.name} (מעדיפה: ${prefs.join(', ')})`, 'app');
         } catch(e) {}
-    });
+    }).catch(e => alert("שגיאה בהרשמה להמתנה: " + e.message));
 };
 
 document.getElementById('startBookingFlow')?.addEventListener('click', () => { showScreen(bookingFlow); document.getElementById('titleSection').style.display = 'block'; document.getElementById('treatmentsList').style.display = 'flex'; document.getElementById('bottomAction').style.display = 'block'; document.getElementById('datetimeSection').style.display = 'none'; if(document.getElementById('timeWrapper')) document.getElementById('timeWrapper').style.display = 'none'; if(document.getElementById('confirmTimeAction')) document.getElementById('confirmTimeAction').style.display = 'none'; document.querySelectorAll('.treatment-card').forEach(el => el.classList.remove('selected')); renderBookingDays(); });
@@ -548,7 +573,6 @@ document.getElementById('continueBtn')?.addEventListener('click', () => { if(!do
 const termsModal = document.getElementById('termsModal');
 document.getElementById('confirmTimeBtn')?.addEventListener('click', () => { termsModal?.classList.add('active'); }); document.getElementById('closeModalBtn')?.addEventListener('click', () => { termsModal?.classList.remove('active'); });
 
-// ✨ התיקון הקריטי למסך הסיכום! ✨
 document.getElementById('approveTermsBtn')?.addEventListener('click', () => {
   termsModal?.classList.remove('active');
   const selectedTreatment = document.querySelector('.treatment-card.selected h2')?.innerText || "טיפול כלשהו"; 
@@ -562,7 +586,6 @@ document.getElementById('approveTermsBtn')?.addEventListener('click', () => {
   const treatmentDur = window.selectedTreatmentDuration || 60;
   const newAppointment = { id: appId, clientName: currentUserName || currentUser.name, clientPhone: currentUserPhone || currentUser.phone, treatment: selectedTreatment, duration: treatmentDur, date: selectedDayDisplay, fullDate: selectedFullDate, time: selectedTime, status: 'pending', statusText: 'מחכה לאישור ⏳', clientConfirmed: false, notes: document.getElementById('clientNotes').value.trim() || "" };  
   
-  // שומרים בענן עם הבטחה למעבר תקין למסך הסיכום
   db.collection("appointments").doc(appId).set(newAppointment).then(() => {
       try {
           notifyAdmin(`תור חדש ממתין לאישור: ${currentUserName || currentUser.name} ל-${selectedDayDisplay} בשעה ${selectedTime}`, 'app', appId);
@@ -577,18 +600,15 @@ document.getElementById('approveTermsBtn')?.addEventListener('click', () => {
           
           document.getElementById('summaryCardDetails').innerHTML = `<p><strong>טיפול:</strong> ${selectedTreatment}</p><p><strong>מתי:</strong> ${selectedDayDisplay}, בשעה ${selectedTime}</p><p><strong>מיקום:</strong> הקליניקה של נטלי</p>`; 
           
-          // ניקוי המסך הקודם והעלאת החדש בזהירות!
           document.getElementById('datetimeSection').style.display = 'none';
           showScreen(sumScreen);
-          
-          // הבטחת עיצוב נכון שלא נמרח לצדדים
           sumScreen.style.flexDirection = 'column';
       } catch(e) {
           console.error("Error switching to summary screen:", e);
       }
   }).catch(err => {
       console.error("Firebase booking error:", err);
-      alert("❌ תקלה בקביעת התור. אנא נסי שוב או פני לנטלי.");
+      alert("❌ תקלה בקביעת התור. ייתכן שאין לך הרשאה: " + err.message);
   });
 });
 

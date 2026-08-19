@@ -1,4 +1,4 @@
-    const { onCall } = require('firebase-functions/v2/https');
+const { onCall } = require('firebase-functions/v2/https');
     const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
     const { onSchedule } = require('firebase-functions/v2/scheduler');
     const admin = require('firebase-admin');
@@ -476,4 +476,31 @@
         
         const appData = event.data.after.data();
         await syncAppointmentToGoogleCalendar(appId, appData);
+    });
+
+    // ============================================================================
+    // 🚀 אוטומציה חדשה: סנכרון זמנים תפוסים (ללא פרטי לקוחות) עבור יומן הלקוחות
+    // ============================================================================
+    exports.syncBusySlots = onDocumentWritten('appointments/{appId}', async (event) => {
+        const appId = event.params.appId;
+        
+        // אם התור נמחק לגמרי
+        if (!event.data.after.exists) {
+            await db.collection('busy_slots').doc(appId).delete();
+            return;
+        }
+        
+        const appData = event.data.after.data();
+        
+        // אם התור בוטל, נשחרר את הזמן מהיומן הציבורי
+        if (appData.status === 'canceled') {
+            await db.collection('busy_slots').doc(appId).delete();
+        } else {
+            // שומרים רק תאריך, שעה ומשך. בלי שמות וטלפונים! (שומר על פרטיות)
+            await db.collection('busy_slots').doc(appId).set({
+                fullDate: appData.fullDate,
+                time: appData.time,
+                duration: appData.duration
+            });
+        }
     });

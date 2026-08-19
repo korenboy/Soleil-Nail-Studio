@@ -91,7 +91,6 @@
 <div class="phone-mockup">
   <div class="app-screen">
 
-    <!-- הוספנו את העטיפה הזו שממרכזת את הכל ומסתירה את הרקע: -->
     <div id="adminAuthScreen">
         
         <div class="auth-box" id="adminPhoneStep">
@@ -116,10 +115,8 @@
             <button style="background: none; border: none; color: #777; margin-top: 10px; text-decoration: underline;" onclick="location.reload()">חזרה</button>
         </div>
 
-    </div> <!-- סגירת עטיפת ההתחברות -->
+    </div>
 
-    <!-- האפליקציה של האדמין -->
-    <!-- כאן תיקנתי את ה-height בחזרה ל-100% במקום 100vh -->
     <div id="adminAppWrapper" style="display: none; height: 100%; flex-direction: column;">
         
         <header class="admin-header">
@@ -321,7 +318,6 @@
   </div>
 </div>
 
-<!-- מודל עריכת תור (חדש!) -->
 <div class="modal-overlay" id="editAppModal">
     <div class="modal-box">
         <h3 style="margin-top: 0; text-align: center; border-bottom: 1px solid #eee; padding-bottom: 10px;">עריכת שעות לתור ✏️</h3>
@@ -598,7 +594,7 @@
         } finally {
             if (btn) { btn.innerText = originalText; btn.disabled = false; }
         }
-    };
+    };  
     
     // ==========================================
     // קפיצה אוטומטית בין קוביות הקוד במסך אדמין
@@ -671,7 +667,11 @@
     });
 
 
+    let listenersInitialized = false;
     function initAdminListeners() {
+        if (listenersInitialized) return;
+        listenersInitialized = true;
+        
         db.collection('shifts').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminShifts', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });
         db.collection('appointments').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('myAppointments', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') loadAllAdminData(); });
         db.collection('treatments').onSnapshot(snap => { let arr = []; snap.forEach(doc => { let t = doc.data(); t.id = doc.id; arr.push(t); }); localStorage.setItem('adminTreatments', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') renderTreatmentsAdmin(); });
@@ -679,6 +679,45 @@
         try {
             db.collection('waitlist').onSnapshot(snap => { let arr = []; snap.forEach(doc => arr.push(doc.data())); localStorage.setItem('adminWaitlist', JSON.stringify(arr)); if(localStorage.getItem('adminLoggedIn') === 'true') renderWaitlistAdmin(); });
         } catch(e) {}
+        
+        // 🔥 התיקון: הכנסנו את ההאזנה להתראות פנימה כדי שתרוץ רק כשיש הרשאת אדמין
+        db.collection("notifications").onSnapshot((snapshot) => {
+            const badge = document.getElementById('notifBadge');
+            const dropdown = document.getElementById('notifDropdown');
+            if(!badge || !dropdown) return;
+            
+            let html = '';
+            let unreadCount = 0;
+            let notifs = [];
+            snapshot.forEach(doc => { notifs.push(doc.data()); });
+            notifs.sort((a,b) => b.id - a.id); // מהחדש לישן
+            
+            notifs.forEach(notif => {
+                if (!notif.read) unreadCount++;
+                const isUserNotif = notif.text && notif.text.includes('לקוח');
+                const targetScreen = isUserNotif ? 'users' : 'appointments';
+                html += `
+                <div class="notif-item ${notif.read ? '' : 'unread'}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div onclick="handleNotifClick('${notif.id}', '${targetScreen}')" style="flex: 1; cursor: pointer;">
+                        <span style="font-size:11px; color:#999; display:block;">${notif.time || ''}</span>
+                        <span>${notif.text}</span>
+                    </div>
+                    <div onclick="deleteNotif('${notif.id}')" style="color: #dc3545; font-size: 20px; cursor: pointer; padding: 0 5px; font-weight: bold;" title="מחק התראה">&times;</div>
+                </div>`;
+            });
+            
+            if (html === '') html = '<div style="padding:15px; text-align:center; color:#777; font-size:13px;">אין התראות חדשות</div>';
+            dropdown.innerHTML = html;
+            
+            if (unreadCount > 0) {
+                badge.style.display = 'flex';
+                badge.innerText = unreadCount;
+            } else {
+                badge.style.display = 'none';
+            }
+        }, (error) => {
+            console.error("Notifications snapshot error:", error);
+        });
     }
 
     window.toggleNotifications = function() {
@@ -957,6 +996,27 @@ window.closeManualBookModal = function() {
         });
     }
     
+    // 🔥 התיקון: הוספת .then() ו- .catch() לכפתורי אישור וביטול תור, כדי לקבל חיווי מסודר ולמנוע שגיאות שקטות
+    window.approveApp = function(id) { 
+        db.collection("appointments").doc(id.toString()).update({
+            status: 'approved', 
+            statusText: 'מאושר ✔️', 
+            reminderSmsSent: false
+        }).then(() => alert('התור אושר בהצלחה!'))
+        .catch(err => alert('שגיאה באישור התור: ' + err.message)); 
+    };
+
+    window.cancelApp = function(id) { 
+        if(confirm('לבטל את התור?')) { 
+            db.collection("appointments").doc(id.toString()).update({
+                status: 'canceled', 
+                statusText: 'בוטל ע"י הקליניקה ❌', 
+                cancelSource: 'admin'
+            }).then(() => alert('התור בוטל בהצלחה!'))
+            .catch(err => alert('שגיאה בביטול התור: ' + err.message)); 
+        } 
+    };
+    
     function renderWaitlistAdmin() {
     const list = document.getElementById('adminWaitlistList');
     if(!list) return;
@@ -969,7 +1029,7 @@ window.closeManualBookModal = function() {
     
     list.innerHTML = '';
     if(waitlist.length === 0) {
-        list.innerHTML = '<p style="color:#777; font-size:13px;">אין כרגע לקוחות בהמתנה.</p>';
+        list.innerHTML = '<p style="text-align:center; color:#777; font-size:13px;">אין כרגע לקוחות בהמתנה.</p>';
         return;
     }
     
@@ -996,7 +1056,9 @@ window.closeManualBookModal = function() {
 
 window.removeFromWaitlist = function(id) {
     if(confirm("להסיר את הלקוחה מרשימת ההמתנה?")) {
-        db.collection("waitlist").doc(id).delete();
+        db.collection("waitlist").doc(id).delete()
+        .then(() => alert("הוסרה בהצלחה מהרשימה!"))
+        .catch(err => alert("שגיאה במחיקה: " + err.message));
     }
 };
 
@@ -1288,8 +1350,6 @@ window.saveShift = async function() {
 };    window.deleteShift = function() { const date = document.getElementById('shiftModalDate').value; db.collection("shifts").doc(date).delete().then(() => { document.getElementById('shiftModal').classList.remove('active'); renderCalendar(); }); }
     
     // (שאר הפונקציות: קביעה ידנית, פיננסים, חסימות משתמש - נשמרו לחלוטין ללא שינוי, השמטתי אותן כאן מהצגה כדי לחסוך מקום, אבל כולן מחוברות ועובדות בדיוק כפי שהיו בקובץ הקודם).
-    window.approveApp = function(id) { db.collection("appointments").doc(id.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}); };
-    window.cancelApp = function(id) { if(confirm('לבטל את התור?')) { db.collection("appointments").doc(id.toString()).update({status: 'canceled', statusText: 'בוטל ע"י הקליניקה ❌', cancelSource: 'admin'}); } };
     window.loadTodaySchedule = function() {
         const scheduleList = document.getElementById('todayScheduleList');
         if(!scheduleList) return;
@@ -1558,317 +1618,6 @@ window.saveClientAppConfig = function(silent = false) {
         }).then(() => {
             alert("התור נקבע בהצלחה!");
             closeManualBookModal();
-        });
-    };
-
-    // === מעקף כפתור תזכורת SMS (מחליף את הפונקציה הקיימת) ===
-    window.sendManualSmsReminder = async function(id) {
-    const app = (JSON.parse(localStorage.getItem('myAppointments')) || []).find(a => String(a.id) === String(id));
-    if(!app) return;
-    if(!confirm(`לשלוח תזכורת SMS ל-${app.clientName}?`)) return;
-
-    try {
-        const sendReminderSms = functions.httpsCallable('sendReminderSms');
-        await sendReminderSms({ phone: app.clientPhone, clientName: app.clientName, date: app.date, time: app.time });
-        await db.collection("appointments").doc(id.toString()).update({reminderSmsSent: true});
-        alert("✅ תזכורת SMS נשלחה בהצלחה!");
-        loadAppointmentsData();
-    } catch(e) { console.error(e); alert("❌ שגיאה בשליחה, ודאי שהמערכת מחוברת."); }
-};
-    // === פתיחת/סגירת חלונית (מתוקן הבאג!) ===
-    window.toggleNotifications = function() {
-        if (window.event) window.event.stopPropagation(); // מגן שמונע סגירה מיידית
-        document.getElementById('notifDropdown').classList.toggle('active');
-    };
-
-    // === סגירת חלונית בלחיצה מחוץ לה ===
-    window.addEventListener('click', function(e) {
-        const dropdown = document.getElementById('notifDropdown');
-        if (dropdown && dropdown.classList.contains('active')) {
-            if (!dropdown.contains(e.target)) {
-                dropdown.classList.remove('active');
-            }
-        }
-    });
-
-    // === טעינת התראות לפעמון למעלה ===
-    db.collection("notifications").onSnapshot((snapshot) => {
-        const badge = document.getElementById('notifBadge');
-        const dropdown = document.getElementById('notifDropdown');
-        if(!badge || !dropdown) return;
-        
-        let html = '';
-        let unreadCount = 0;
-        let notifs = [];
-        snapshot.forEach(doc => { notifs.push(doc.data()); });
-        notifs.sort((a,b) => b.id - a.id); // מהחדש לישן
-        
-        notifs.forEach(notif => {
-            if (!notif.read) unreadCount++;
-            
-            // זיהוי לאיזה מסך צריך לעבור
-            const isUserNotif = notif.text && notif.text.includes('לקוח');
-            const targetScreen = isUserNotif ? 'users' : 'appointments';
-
-            html += `
-            <div class="notif-item ${notif.read ? '' : 'unread'}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                <div onclick="handleNotifClick('${notif.id}', '${targetScreen}')" style="flex: 1; cursor: pointer;">
-                    <span style="font-size:11px; color:#999; display:block;">${notif.time || ''}</span>
-                    <span>${notif.text}</span>
-                </div>
-                <div onclick="deleteNotif('${notif.id}')" style="color: #dc3545; font-size: 20px; cursor: pointer; padding: 0 5px; font-weight: bold;" title="מחק התראה">&times;</div>
-            </div>`;
-        });
-        
-        if (html === '') html = '<div style="padding:15px; text-align:center; color:#777; font-size:13px;">אין התראות חדשות</div>';
-        dropdown.innerHTML = html;
-        
-        if (unreadCount > 0) {
-            badge.style.display = 'flex';
-            badge.innerText = unreadCount;
-        } else {
-            badge.style.display = 'none';
-        }
-    });
-
-    // === טיפול בלחיצה על התראה (מעבר ישיר ומדויק!) ===
-    window.handleNotifClick = function(id, targetScreen) {
-        if (window.event) window.event.stopPropagation(); // מונע התנגשויות
-        
-        // 1. מסמן כנקרא בענן
-        db.collection('notifications').doc(id).update({ read: true });
-        
-        // 2. סוגר את חלונית ההתראות
-        document.getElementById('notifDropdown').classList.remove('active');
-        
-        // 3. מחליף מסכים ישירות לפי הלוגיקה של האפליקציה שלך
-        let targetId = '';
-        if (targetScreen === 'users') {
-            targetId = 'clientsScreen'; // המסך של ניהול לקוחות
-        } else if (targetScreen === 'appointments') {
-            targetId = 'appointmentsScreen'; // המסך של ניהול תורים
-        }
-
-        if (targetId) {
-            // א. מסתיר את כל המסכים הקיימים ומוריד את הסימון מהתפריט
-            document.querySelectorAll('.admin-screen').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            
-            // ב. מציג את המסך המבוקש
-            document.getElementById(targetId).classList.add('active');
-            
-            // ג. מסמן את הכפתור המתאים בתפריט הצדדי כ"פעיל" (בצבע זהב)
-            const targetNavItem = document.querySelector(`.nav-item[data-target="${targetId}"]`);
-            if (targetNavItem) {
-                targetNavItem.classList.add('active');
-            }
-        }
-    };
-
-    // === מחיקת התראה ===
-    window.deleteNotif = function(id) {
-        if (window.event) window.event.stopPropagation(); // שלא יעביר מסך בטעות כשלוחצים מחיקה
-        if(confirm('למחוק את ההתראה?')) {
-            db.collection('notifications').doc(id).delete();
-        }
-    };
-
-    // === שינוי מספר טלפון של האדמין עם אימות SMS כפול ===
-    window.changeAdminPhone = async function() {
-        const newPhone = document.getElementById('newAdminPhoneInput').value.trim();
-        if(!newPhone || newPhone.length < 9) { alert("נא להזין מספר טלפון תקין"); return; }
-        
-        if(!confirm(`האם לשלוח קוד אימות ב-SMS למספר החדש (${newPhone}) כדי לבצע את השינוי?`)) return;
-        
-        try {
-            // שלב א': שליחת קוד האימות למספר החדש
-            const sendOtpSms = functions.httpsCallable('sendOtpSms');
-            await sendOtpSms({ phone: newPhone });
-            
-            // שלב ב': הקפצת תיבת קלט מאובטחת להזנת הקוד
-            const enteredCode = prompt("🔐 קוד אימות נשלח למספר החדש.\nהקלידי כאן את הקוד שקיבלת כדי לאשר את החלפת המספר:");
-            
-            if (!enteredCode) { 
-                alert("הפעולה בוטלה. מספר הטלפון לא שונה."); 
-                return; 
-            }
-            
-            // שלב ג': בדיקת הקוד שהוזן מול מסד הנתונים
-            const otpDoc = await db.collection('otps').doc(newPhone).get();
-            
-            if (otpDoc.exists && otpDoc.data().code === enteredCode) {
-                // שלב ד': עדכון סופי של מספר המנהלת בענן - רק אחרי אימות מוצלח!
-                await db.collection('settings').doc('adminConfig').set({ adminPhone: newPhone }, { merge: true });
-                alert("✅ המספר החדש אומת ונשמר בהצלחה בענן! מפתח הגישה שונה.");
-                document.getElementById('newAdminPhoneInput').value = '';
-            } else {
-                alert("❌ קוד שגוי! מספר הטלפון של המערכת לא שונה.");
-            }
-        } catch(e) {
-            alert("שגיאה בתהליך אימות המספר.");
-            console.error(e);
-        }
-    };
-
-window.saveFinanceRecord = function() {
-        const type = document.getElementById('finType').value;
-        const amount = document.getElementById('finAmount').value;
-        const desc = document.getElementById('finDesc').value;
-        const date = document.getElementById('finDate').value;
-        
-        // בודקים אם אנחנו במצב "עריכה" או "הוספה חדשה"
-        const editId = document.getElementById('finFormTitle').getAttribute('data-edit-id');
-        
-        if(!amount || !desc || !date) { alert("יש למלא את כל השדות!"); return; }
-        
-        const btn = document.getElementById('finSaveBtn');
-        btn.innerText = 'שומר...'; btn.disabled = true;
-
-        const recordId = editId ? editId : Date.now().toString();
-        const monthStr = date.substring(0, 7);
-        
-        db.collection('finance').doc(recordId).set({
-            id: recordId, 
-            type: type, 
-            amount: parseInt(amount), 
-            desc: desc, 
-            date: date, 
-            month: monthStr, 
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).then(() => {
-            alert(editId ? "התנועה עודכנה בהצלחה! 💰" : "תנועה נשמרה בהצלחה! 💰");
-            cancelFinanceEdit(); // מנקה את הטופס ומחזיר למצב הוספה
-            loadFinanceData();
-        }).catch(err => {
-            alert("שגיאה בשמירה!");
-        }).finally(() => {
-            btn.disabled = false;
-        });
-    };
-
-    window.editFinanceRecord = function(id) {
-        // מושכים את פרטי התנועה מהענן
-        db.collection('finance').doc(id).get().then(doc => {
-            if(doc.exists) {
-                const r = doc.data();
-                document.getElementById('finType').value = r.type;
-                document.getElementById('finAmount').value = r.amount;
-                document.getElementById('finDesc').value = r.desc;
-                document.getElementById('finDate').value = r.date;
-                
-                // משנים את הטופס למצב עריכה
-                document.getElementById('finFormTitle').innerText = 'עריכת תנועה ✏️';
-                document.getElementById('finFormTitle').setAttribute('data-edit-id', id);
-                document.getElementById('finSaveBtn').innerText = 'שמור שינויים';
-                document.getElementById('finCancelEditBtn').style.display = 'block';
-                
-                // קופצים למעלה חזרה לטופס
-                document.getElementById('financeScreen').scrollTop = 0;
-            }
-        });
-    };
-
-    window.cancelFinanceEdit = function() {
-        document.getElementById('finFormTitle').innerText = 'הוספת תנועה';
-        document.getElementById('finFormTitle').removeAttribute('data-edit-id');
-        document.getElementById('finType').value = 'income';
-        document.getElementById('finAmount').value = '';
-        document.getElementById('finDesc').value = '';
-        document.getElementById('finDate').value = '';
-        document.getElementById('finSaveBtn').innerText = 'שמירה';
-        document.getElementById('finCancelEditBtn').style.display = 'none';
-    };
-
-    window.loadFinanceData = function() {
-        const month = document.getElementById('finMonthSelect').value;
-        if(!month) return;
-        
-        const list = document.getElementById('finHistoryList');
-        if(!list) return;
-        list.innerHTML = 'טוען...';
-        
-        db.collection('finance').where('month', '==', month).get().then(snap => {
-            let totalIncome = 0; let totalExpense = 0;
-            list.innerHTML = '';
-            
-            if(snap.empty) {
-                list.innerHTML = '<p style="text-align:center; color:#777;">אין תנועות לחודש זה.</p>';
-            }
-            
-            let records = [];
-            snap.forEach(doc => records.push(doc.data()));
-            records.sort((a,b) => b.date.localeCompare(a.date));
-            
-            records.forEach(r => {
-                if(r.type === 'income') totalIncome += r.amount; else totalExpense += r.amount;
-                let color = r.type === 'income' ? '#28a745' : '#dc3545';
-                let sign = r.type === 'income' ? '+' : '-';
-                
-                // 🔥 הוספתי כאן את כפתור העריכה (✏️) ליד כפתור המחיקה
-                list.innerHTML += `
-                <div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; align-items:center;">
-                    <div style="flex:1;"><strong>${r.desc}</strong><br><span style="font-size:12px; color:#777;">${r.date.split('-').reverse().join('.')}</span></div>
-                    <div style="color:${color}; font-weight:bold; direction:ltr; margin-left: 10px;">${sign} ₪${r.amount}</div>
-                    <div style="display:flex; gap:5px;">
-                        <button style="background:none; border:none; color:#007bff; font-size:16px; cursor:pointer; padding:5px;" onclick="editFinanceRecord('${r.id}')">✏️</button>
-                        <button style="background:none; border:none; color:#dc3545; font-size:16px; cursor:pointer; padding:5px;" onclick="deleteFinanceRecord('${r.id}')">🗑️</button>
-                    </div>
-                </div>`;
-            });
-            
-            const incomeEl = document.getElementById('finIncomeStat');
-            const expenseEl = document.getElementById('finExpenseStat');
-            if(incomeEl) incomeEl.innerText = '₪ ' + totalIncome;
-            if(expenseEl) expenseEl.innerText = '₪ ' + totalExpense;
-            
-            let profit = totalIncome - totalExpense;
-            let dashProfit = document.getElementById('dashStatProfit');
-            if(dashProfit) dashProfit.innerText = '₪ ' + profit;
-            let dashIncome = document.getElementById('dashStatIncome');
-            if(dashIncome) dashIncome.innerText = '₪ ' + totalIncome;
-        });
-    };
-
-    window.deleteFinanceRecord = function(id) {
-        if(confirm("האם למחוק תנועה זו?")) {
-            db.collection('finance').doc(id).delete().then(() => loadFinanceData());
-        }
-    };
-
-    // ==========================================
-    // שמירת לקוחה ישירות מהמסך "ניהול לקוחות"
-    // ==========================================
-        window.saveNewClientDirect = function() {
-        const name = document.getElementById('addClientName').value.trim();
-        const phone = document.getElementById('addClientPhone').value.trim();
-
-        if (!name || !phone) { alert("יש להזין שם ומספר טלפון"); return; }
-        if (phone.length < 9) { alert("מספר טלפון לא נראה תקין"); return; }
-
-        // פה תוקן הבאג - מושך את הכפתור הנכון בלי להתבלבל!
-        const btn = document.querySelector('#addClientModal .btn-submit');
-        if (btn) {
-            btn.innerText = 'שומר...'; 
-            btn.disabled = true;
-        }
-
-        db.collection("users").doc(phone).set({
-            name: name,
-            phone: phone,
-            status: 'approved' // מאשרים אותה אוטומטית כי נטלי הוסיפה אותה
-        }).then(() => {
-            alert("הלקוחה הוספה בהצלחה לרשימת הלקוחות שלך! ✅");
-            document.getElementById('addClientModal').classList.remove('active');
-            document.getElementById('addClientName').value = '';
-            document.getElementById('addClientPhone').value = '';
-        }).catch(err => {
-            console.error("Error adding client:", err);
-            alert("שגיאה בשמירת הלקוחה.");
-        }).finally(() => {
-            if (btn) {
-                btn.innerText = 'שמירת לקוחה במערכת'; 
-                btn.disabled = false;
-            }
         });
     };
 
