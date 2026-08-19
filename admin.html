@@ -13,6 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>    
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
     <title>מערכת ניהול - Soleil Nail Studio</title>
     
     <link rel="stylesheet" href="style.css">
@@ -466,6 +467,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const functions = firebase.functions(); // הפעלת חיבור לשרת!!
+    const storage = firebase.storage(); // 🔥 השורה החדשה שהוספנו!
 
     // 🌟 התיקון הקריטי: הגדרת ה-auth חייבת להיות פה למעלה! 🌟
     const auth = firebase.auth(); 
@@ -1376,36 +1378,65 @@ window.saveShift = async function() {
     };
     
     window.handleImageUpload = function(event, targetId) {
-    const file = event.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image(); img.src = e.target.result;
-        img.onload = function() {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800; // דחיסה כדי שהענן יקבל את זה מהר ובלי שגיאות
-            const scaleSize = MAX_WIDTH / img.width;
-            canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
-            const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const base64Str = canvas.toDataURL('image/jpeg', 0.8);
-            
-            document.getElementById(targetId).value = base64Str;
-            const preview = document.getElementById(targetId + '_preview');
-            if(preview) { preview.src = base64Str; preview.style.display = 'inline-block'; }
-            saveClientAppConfig(true); // שמירה אוטומטית בלי קפיצת פופ-אפ מציק
-        }
-    };
-    reader.readAsDataURL(file);
-};
-window.saveClientAppConfig = function(silent = false) {
-    const msg = document.getElementById('confMsg').value;
-    const img1 = document.getElementById('confImg1Base64').value;
-    const img2 = document.getElementById('confImg2Base64').value;
-    const img3 = document.getElementById('confImg3Base64').value;
+        const file = event.target.files[0]; 
+        if (!file) return;
+        
+        const saveBtn = document.querySelector('button[onclick="saveClientAppConfig()"]');
+        if(saveBtn) { saveBtn.innerText = 'מעלה תמונה לענן... ⏳'; saveBtn.disabled = true; }
 
-    db.collection('settings').doc('homeConfig').set({ msg: msg, img1: img1, img2: img2, img3: img3 }, { merge: true }).then(() => {
-        if(silent !== true) alert("הגדרות ועיצוב נשמרו בהצלחה! יתעדכן אצל כל הלקוחות.");
-    });
-};
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image(); 
+            img.src = e.target.result;
+            img.onload = function() {
+                // 1. דחיסת התמונה כדי שתטען מהר
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 800; 
+                const scaleSize = MAX_WIDTH / img.width;
+                canvas.width = MAX_WIDTH; 
+                canvas.height = img.height * scaleSize;
+                const ctx = canvas.getContext('2d'); 
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const base64Str = canvas.toDataURL('image/jpeg', 0.8);
+                
+                // 2. העלאה חכמה ל-Firebase Storage במקום למסד הנתונים
+                const fileName = 'gallery/' + targetId + '_' + Date.now() + '.jpg';
+                const storageRef = storage.ref().child(fileName);
+                
+                storageRef.putString(base64Str, 'data_url').then(function(snapshot) {
+                    snapshot.ref.getDownloadURL().then(function(downloadURL) {
+                        
+                        // 3. שומרים רק את הלינק הקצר במסד הנתונים!
+                        document.getElementById(targetId).value = downloadURL;
+                        const preview = document.getElementById(targetId + '_preview');
+                        if(preview) { preview.src = downloadURL; preview.style.display = 'inline-block'; }
+                        
+                        saveClientAppConfig(true); 
+                        if(saveBtn) { saveBtn.innerText = 'שמירת עיצוב לענן'; saveBtn.disabled = false; }
+                        
+                    });
+                }).catch(err => {
+                    console.error(err);
+                    alert("שגיאה בהעלאת התמונה: " + err.message);
+                    if(saveBtn) { saveBtn.innerText = 'שמירת עיצוב לענן'; saveBtn.disabled = false; }
+                });
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.saveClientAppConfig = function(silent = false) {
+        const msg = document.getElementById('confMsg').value;
+        const img1 = document.getElementById('confImg1Base64').value;
+        const img2 = document.getElementById('confImg2Base64').value;
+        const img3 = document.getElementById('confImg3Base64').value;
+
+        db.collection('settings').doc('homeConfig').set({ 
+            msg: msg, img1: img1, img2: img2, img3: img3 
+        }, { merge: true }).then(() => {
+            if(silent !== true) alert("הגדרות ועיצוב נשמרו בהצלחה! יתעדכן אצל כל הלקוחות.");
+        });
+    };
 
 // === פונקציות עזר לזמנים ===
     function timeToMinutes(timeStr) { let [h, m] = (timeStr||"00:00").split(':').map(Number); return h * 60 + m; }
