@@ -497,36 +497,48 @@
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
-    if (localStorage.getItem('adminLoggedIn') === 'true') {
-        document.getElementById('adminAuthScreen').style.display = 'none';
-        document.getElementById('adminAppWrapper').style.display = 'flex';
-        const currentMonthStr = new Date().toISOString().substring(0, 7);
-        document.getElementById('finMonthSelect').value = currentMonthStr;
-        
-        auth.onAuthStateChanged((user) => {
-            if (user) {
-                initAdminListeners();
-            }
-        });
-        
-        // --- קוד חדש ללכידת הלחיצה מטלגרם ---
-        const urlParams = new URLSearchParams(window.location.search);
-        const action = urlParams.get('action');
-        
-        if (action === 'approve_app') {
-            const appId = urlParams.get('id');
-            db.collection("appointments").doc(appId.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}).then(() => {
-                alert("התור אושר בהצלחה מטלגרם! ✅");
-                window.history.replaceState(null, null, window.location.pathname); // מנקה את הלינק
-            });
-        } else if (action === 'approve_user') {
-            const phone = urlParams.get('phone');
-            db.collection("users").doc(phone).update({ status: 'approved' }).then(() => {
-                alert("הלקוחה אושרה בהצלחה מטלגרם! ✅");
-                window.history.replaceState(null, null, window.location.pathname);
-            });
+    // 🔥 בדיקת אבטחה אמיתית מול השרת דרך טוקן! 🔥
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            try {
+                const idTokenResult = await user.getIdTokenResult();
+                if (idTokenResult.claims.admin === true) {
+                    document.getElementById('adminAuthScreen').style.display = 'none';
+                    document.getElementById('adminAppWrapper').style.display = 'flex';
+                    const currentMonthStr = new Date().toISOString().substring(0, 7);
+                    if(document.getElementById('finMonthSelect')) document.getElementById('finMonthSelect').value = currentMonthStr;
+                    
+                    initAdminListeners();
+                    loadAllAdminData();
+
+                    // --- קוד חדש ללכידת הלחיצה מטלגרם ---
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const action = urlParams.get('action');
+                    
+                    if (action === 'approve_app') {
+                        const appId = urlParams.get('id');
+                        db.collection("appointments").doc(appId.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}).then(() => {
+                            alert("התור אושר בהצלחה מטלגרם! ✅");
+                            window.history.replaceState(null, null, window.location.pathname);
+                        });
+                    } else if (action === 'approve_user') {
+                        const phone = urlParams.get('phone');
+                        db.collection("users").doc(phone).update({ status: 'approved' }).then(() => {
+                            alert("הלקוחה אושרה בהצלחה מטלגרם! ✅");
+                            window.history.replaceState(null, null, window.location.pathname);
+                        });
+                    }
+                } else {
+                    alert("שגיאת הרשאות: אין לך תג מנהלת!");
+                    auth.signOut();
+                    location.reload();
+                }
+            } catch(e) { console.error("Error verifying admin claim", e); }
+        } else {
+            document.getElementById('adminAuthScreen').style.display = 'flex';
+            document.getElementById('adminAppWrapper').style.display = 'none';
         }
-    }
+    });
 
     window.requestAdminOtp = async function() {
         let phone = document.getElementById('adminPhoneInput').value.trim();
@@ -716,11 +728,12 @@
                 if (!notif.read) unreadCount++;
                 const isUserNotif = notif.text && notif.text.includes('לקוח');
                 const targetScreen = isUserNotif ? 'users' : 'appointments';
+                // 🔥 הוספנו esc() נגד פריצות 🔥
                 html += `
                 <div class="notif-item ${notif.read ? '' : 'unread'}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                     <div onclick="handleNotifClick('${notif.id}', '${targetScreen}')" style="flex: 1; cursor: pointer;">
                         <span style="font-size:11px; color:#999; display:block;">${notif.time || ''}</span>
-                        <span>${notif.text}</span>
+                        <span>${esc(notif.text)}</span>
                     </div>
                     <div onclick="deleteNotif('${notif.id}')" style="color: #dc3545; font-size: 20px; cursor: pointer; padding: 0 5px; font-weight: bold;" title="מחק התראה">&times;</div>
                 </div>`;
@@ -1389,7 +1402,6 @@ window.saveShift = async function() {
     }
 };    window.deleteShift = function() { const date = document.getElementById('shiftModalDate').value; db.collection("shifts").doc(date).delete().then(() => { document.getElementById('shiftModal').classList.remove('active'); renderCalendar(); }); }
     
-    // (שאר הפונקציות: קביעה ידנית, פיננסים, חסימות משתמש - נשמרו לחלוטין ללא שינוי, השמטתי אותן כאן מהצגה כדי לחסוך מקום, אבל כולן מחוברות ועובדות בדיוק כפי שהיו בקובץ הקודם).
     window.loadTodaySchedule = function() {
         const scheduleList = document.getElementById('todayScheduleList');
         if(!scheduleList) return;
@@ -1411,7 +1423,8 @@ window.saveShift = async function() {
         }
 
         todayAppointments.forEach(app => {
-            scheduleList.innerHTML += `<div class="schedule-card"><div class="time-box">${app.time}</div><div style="flex:1; margin-right:10px;"><strong>${app.clientName}</strong><br><span style="font-size:12px; color:#777;">${app.treatment}</span></div></div>`;
+            // 🔥 הוספנו esc() לשם ולטיפול! 🔥
+            scheduleList.innerHTML += `<div class="schedule-card"><div class="time-box">${app.time}</div><div style="flex:1; margin-right:10px;"><strong>${esc(app.clientName)}</strong><br><span style="font-size:12px; color:#777;">${esc(app.treatment)}</span></div></div>`;
         });
     };
     

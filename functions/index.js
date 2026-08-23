@@ -161,7 +161,11 @@ const { onCall } = require('firebase-functions/v2/https');
         }
     });
 
-    exports.sendBroadcastSms = onCall({ cors: true, invoker: "public" }, async (request) => {
+    exports.sendBroadcastSms = onCall({ cors: true }, async (request) => {
+        // 🔥 חסימה: רק מנהלת אמיתית עם טוקן יכולה לשלוח תפוצה! 🔥
+        if (!request.auth || request.auth.token.admin !== true) {
+            return { success: false, error: "Permission denied. Admin only." };
+        }
         const { message, phones } = request.data;
         if (phones) {
             for (const phone of phones) { await sendPulseemSMS(phone, message); }
@@ -169,11 +173,13 @@ const { onCall } = require('firebase-functions/v2/https');
         return { success: true };
     });
 
-    exports.sendReminderSms = onCall({ cors: true, invoker: "public" }, async (request) => {
-        // מושכים את ה-id שהאדמין שולח אלינו
+    exports.sendReminderSms = onCall({ cors: true }, async (request) => {
+        // 🔥 חסימה: רק מנהלת יכולה לשלוח תזכורות ידניות! 🔥
+        if (!request.auth || request.auth.token.admin !== true) {
+            return { success: false, error: "Permission denied. Admin only." };
+        }
         const { phone, clientName, date, time, id } = request.data; 
         const address = process.env.CLINIC_ADDRESS || "";
-        // הלינק המדויק לאישור הגעה מהיר
         const confirmLink = `https://soleilnailstudio.co.il/?action=confirm_arrival&id=${id}`;
         
         await sendPulseemSMS(phone, `היי ${clientName}, תזכורת לתור ב-Soleil ב-${date} בשעה ${time} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`);
