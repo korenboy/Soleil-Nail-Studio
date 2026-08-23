@@ -288,18 +288,36 @@
                 <div style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom:15px;">
                     <h3 style="margin-top: 0; font-size:16px; color:#C2A878;">עיצוב אפליקציית הלקוחות</h3>
                     <textarea class="form-input" id="confMsg" rows="3" placeholder="הודעת מערכת ללקוחות..."></textarea>
-                    <label style="font-size:13px; color:#555;">תמונת גלריה 1:</label>
-<input type="file" accept="image/*" class="form-input" onchange="handleImageUpload(event, 'confImg1Base64')">
-<input type="hidden" id="confImg1Base64">
+                    
+                    <div style="background: #fdfbf7; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee;">
+                        <label style="font-size:13px; color:#555; display:block; margin-bottom:5px;">תמונת גלריה 1:</label>
+                        <input type="file" accept="image/*" class="form-input" onchange="handleImageUpload(event, 'confImg1Base64')" style="margin-bottom: 5px;">
+                        <input type="hidden" id="confImg1Base64">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <img id="confImg1Base64_preview" style="max-width: 80px; border-radius: 8px; display: none;">
+                            <button id="confImg1Base64_delBtn" style="background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:6px; cursor:pointer; display:none;" onclick="deleteGalleryImage('confImg1Base64')">🗑️ מחיקה</button>
+                        </div>
+                    </div>
 
-<label style="font-size:13px; color:#555;">תמונת גלריה 2:</label>
-<input type="file" accept="image/*" class="form-input" onchange="handleImageUpload(event, 'confImg2Base64')">
-<input type="hidden" id="confImg2Base64">
+                    <div style="background: #fdfbf7; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee;">
+                        <label style="font-size:13px; color:#555; display:block; margin-bottom:5px;">תמונת גלריה 2:</label>
+                        <input type="file" accept="image/*" class="form-input" onchange="handleImageUpload(event, 'confImg2Base64')" style="margin-bottom: 5px;">
+                        <input type="hidden" id="confImg2Base64">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <img id="confImg2Base64_preview" style="max-width: 80px; border-radius: 8px; display: none;">
+                            <button id="confImg2Base64_delBtn" style="background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:6px; cursor:pointer; display:none;" onclick="deleteGalleryImage('confImg2Base64')">🗑️ מחיקה</button>
+                        </div>
+                    </div>
 
-<label style="font-size:13px; color:#555;">תמונת גלריה 3:</label>
-<input type="file" accept="image/*" class="form-input" onchange="handleImageUpload(event, 'confImg3Base64')">
-<input type="hidden" id="confImg3Base64">
-                    <img id="confImg1Base64_preview" style="max-width: 80px; border-radius: 8px; display: none;">
+                    <div style="background: #fdfbf7; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee;">
+                        <label style="font-size:13px; color:#555; display:block; margin-bottom:5px;">תמונת גלריה 3:</label>
+                        <input type="file" accept="image/*" class="form-input" onchange="handleImageUpload(event, 'confImg3Base64')" style="margin-bottom: 5px;">
+                        <input type="hidden" id="confImg3Base64">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <img id="confImg3Base64_preview" style="max-width: 80px; border-radius: 8px; display: none;">
+                            <button id="confImg3Base64_delBtn" style="background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:6px; cursor:pointer; display:none;" onclick="deleteGalleryImage('confImg3Base64')">🗑️ מחיקה</button>
+                        </div>
+                    </div>
                     
                     <button class="btn-submit" onclick="saveClientAppConfig()" style="margin-top:10px;">שמירת עיצוב לענן</button>
                 </div>
@@ -774,6 +792,27 @@ window.closeManualBookModal = function() {
         loadAppointmentsData(); 
         renderCalendar();
         if(typeof loadFinanceData === 'function') loadFinanceData();
+
+        // 🔥 טעינת הגדרות העיצוב (תמונות גלריה) שביקשת! 🔥
+        db.collection('settings').doc('homeConfig').get().then(doc => {
+            if(doc.exists) {
+                const data = doc.data();
+                const confMsgEl = document.getElementById('confMsg');
+                if(confMsgEl) confMsgEl.value = data.msg || '';
+                ['1','2','3'].forEach(num => {
+                    const imgUrl = data['img'+num];
+                    if(imgUrl) {
+                        const targetId = 'confImg' + num + 'Base64';
+                        const targetInput = document.getElementById(targetId);
+                        if(targetInput) targetInput.value = imgUrl;
+                        const preview = document.getElementById(targetId + '_preview');
+                        const delBtn = document.getElementById(targetId + '_delBtn');
+                        if(preview) { preview.src = imgUrl; preview.style.display = 'inline-block'; }
+                        if(delBtn) { delBtn.style.display = 'inline-block'; }
+                    }
+                });
+            }
+        });
     };
 
     // ==========================================
@@ -986,7 +1025,6 @@ window.closeManualBookModal = function() {
             if(!app) return; let isPast = false; if(app.fullDate && app.fullDate < todayStr) isPast = true; else if (app.fullDate === todayStr) { const [h, m] = (app.time || "00:00").split(':').map(Number); if ((h * 60 + m) < currentMinutes) isPast = true; }
             let confirmedText = app.clientConfirmed ? `<span style="color:#28a745; font-size:12px;">✅ אישרה</span>` : '';
             let reminderStatus = app.reminderSmsSent ? '<span style="font-size: 13px; color: #28a745; background: #e8f5e9; padding: 2px 8px; border-radius: 10px; margin-right: 8px;">✉️ תזכורת נשלחה</span>' : '';
-            // כאן ההגנה פועלת! הוספנו esc()
             let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${esc(app.clientPhone)}')">${esc(app.clientName)}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${esc(app.treatment)} ${confirmedText}</div>`;
             if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color: #555; background: #fdfbf7; border: 1px dashed #C2A878; padding: 8px; border-radius: 4px;">📝 <b>הערות:</b> ${esc(app.notes)}</div>`; }            
             if (app.status === 'pending') {
@@ -997,8 +1035,8 @@ window.closeManualBookModal = function() {
             }
         });
     }
-    
-    // 🔥 התיקון: הוספת .then() ו- .catch() לכפתורי אישור וביטול תור, כדי לקבל חיווי מסודר ולמנוע שגיאות שקטות
+
+    // 🔥 התיקון: הוספת .then() ו- .catch() לכפתורי אישור וביטול תור
     window.approveApp = function(id) { 
         db.collection("appointments").doc(id.toString()).update({
             status: 'approved', 
@@ -1377,6 +1415,7 @@ window.saveShift = async function() {
         });
     };
     
+    // 🔥 התיקון הקריטי: עדכון הפונקציה כדי שתשמור ב-Firebase Storage במקום כטקסט 🔥
     window.handleImageUpload = function(event, targetId) {
         const file = event.target.files[0]; 
         if (!file) return;
@@ -1389,7 +1428,6 @@ window.saveShift = async function() {
             const img = new Image(); 
             img.src = e.target.result;
             img.onload = function() {
-                // 1. דחיסת התמונה כדי שתטען מהר
                 const canvas = document.createElement('canvas');
                 const MAX_WIDTH = 800; 
                 const scaleSize = MAX_WIDTH / img.width;
@@ -1399,17 +1437,18 @@ window.saveShift = async function() {
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 const base64Str = canvas.toDataURL('image/jpeg', 0.8);
                 
-                // 2. העלאה חכמה ל-Firebase Storage במקום למסד הנתונים
                 const fileName = 'gallery/' + targetId + '_' + Date.now() + '.jpg';
                 const storageRef = storage.ref().child(fileName);
                 
                 storageRef.putString(base64Str, 'data_url').then(function(snapshot) {
                     snapshot.ref.getDownloadURL().then(function(downloadURL) {
                         
-                        // 3. שומרים רק את הלינק הקצר במסד הנתונים!
-                        document.getElementById(targetId).value = downloadURL;
+                        const el = document.getElementById(targetId);
+                        if(el) el.value = downloadURL;
                         const preview = document.getElementById(targetId + '_preview');
+                        const delBtn = document.getElementById(targetId + '_delBtn');
                         if(preview) { preview.src = downloadURL; preview.style.display = 'inline-block'; }
+                        if(delBtn) { delBtn.style.display = 'inline-block'; }
                         
                         saveClientAppConfig(true); 
                         if(saveBtn) { saveBtn.innerText = 'שמירת עיצוב לענן'; saveBtn.disabled = false; }
@@ -1423,6 +1462,30 @@ window.saveShift = async function() {
             }
         };
         reader.readAsDataURL(file);
+    };
+
+    // 🔥 התיקון הקריטי: הפונקציה החדשה שמוחקת את התמונות מהענן! 🔥
+    window.deleteGalleryImage = function(targetId) {
+        if(!confirm("האם למחוק תמונה זו מהגלריה?")) return;
+        
+        const el = document.getElementById(targetId);
+        const url = el ? el.value : '';
+        // מחיקה ממחסן הקבצים אם זה לינק של פיירבייס
+        if(url && url.includes('firebasestorage')) {
+            try {
+                storage.refFromURL(url).delete();
+            } catch(e) { console.warn("Could not delete from storage", e); }
+        }
+        
+        // איפוס בממשק
+        if(el) el.value = '';
+        const preview = document.getElementById(targetId + '_preview');
+        const delBtn = document.getElementById(targetId + '_delBtn');
+        if(preview) preview.style.display = 'none';
+        if(delBtn) delBtn.style.display = 'none';
+        
+        // שמירת המצב הריק בענן
+        saveClientAppConfig(true);
     };
 
     window.saveClientAppConfig = function(silent = false) {
