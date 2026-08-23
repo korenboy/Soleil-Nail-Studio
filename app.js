@@ -329,6 +329,17 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
         if (result.data && result.data.success) {
             await auth.signInWithCustomToken(result.data.token);
             
+            // 🌟 התיקון הקריטי (Race Condition Fix): מחכים שפיירבייס יאשר את תג האבטחה! 🌟
+            await new Promise((resolve) => {
+                const unsub = auth.onAuthStateChanged(user => {
+                    if (user) {
+                        unsub(); // ברגע שהמשתמש זוהה עם התג, מפסיקים לחכות
+                        resolve();
+                    }
+                });
+            });
+            
+            // עכשיו הגישה בטוחה ב-100%
             const userDoc = await db.collection("users").doc(phone).get();
             let userToSave;
             if (userDoc.exists) {
@@ -349,13 +360,14 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
             localStorage.setItem('currentUser', JSON.stringify(userToSave));
             listenToCurrentUser(phone);
         } else {
-            alert("❌ שגיאה מהשרת: " + result.data.error);
+            alert("❌ " + (result.data.error || "שגיאה מהשרת"));
             otpInputs.forEach(i => i.value = '');
             if(otpInputs.length > 0) otpInputs[0].focus();
         }
     } catch (error) {
         console.error("Verification error:", error);
-        alert("שגיאה בחיבור למערכת.");
+        // הוספתי פה את השגיאה המפורטת, ככה שאם זה נכשל, נדע מיד למה!
+        alert("שגיאה בחיבור: " + error.message);
     } finally {
         btn.innerText = "אימות וכניסה";
         btn.disabled = false;
