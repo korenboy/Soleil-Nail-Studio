@@ -16,6 +16,7 @@ const functions = firebase.functions();
 let currentUserPhone = null;
 let currentUserName = null;
 let myAppsUnsubscribe = null;
+let userUnsubscribe = null; // 🔥 התיקון שפתר את הקריסה באייפון! 🔥
 
 // האזנה למשמרות הפתוחות של נטלי
 db.collection('shifts').onSnapshot(snap => {
@@ -27,7 +28,7 @@ db.collection('shifts').onSnapshot(snap => {
     }
 });
 
-// 🔥 התיקון: מאזינים רק ל"שעות התפוסות" (ללא שמות) כדי לחשב יומן מאובטח! 🔥
+// מאזינים רק ל"שעות התפוסות" (ללא שמות) כדי לחשב יומן מאובטח
 db.collection('busy_slots').onSnapshot(snap => {
     let busy = [];
     snap.forEach(doc => busy.push(doc.data()));
@@ -164,6 +165,7 @@ function performLogout() {
       if(document.getElementById('loginPhone')) document.getElementById('loginPhone').value = '';
   });
 }
+
 function showScreen(screenToShow) {
   if(loginScreen) loginScreen.style.display = 'none';
   if(pendingApprovalScreen) pendingApprovalScreen.style.display = 'none';
@@ -195,7 +197,6 @@ function listenToCurrentUser(phone) {
                 applyHomeConfig(syncedUser.name);
                 if(mainHeader) mainHeader.style.display = 'flex';
                 
-                // 🔥 התיקון: הלקוחה מושכת *רק* את התורים של עצמה! 🔥
                 if(myAppsUnsubscribe) myAppsUnsubscribe();
                 myAppsUnsubscribe = db.collection('appointments')
                     .where('clientPhone', '==', phone)
@@ -242,9 +243,6 @@ if (savedUser) {
 
 let pendingUserDetails = null;
 
-// ==========================================
-// בקשת SMS דרך פולסים בשרת
-// ==========================================
 document.getElementById('requestOtpBtn')?.addEventListener('click', async () => {
     const nameInput = document.getElementById('loginName')?.value.trim() || ""; 
     let phoneInput = document.getElementById('loginPhone')?.value.trim() || "";
@@ -305,9 +303,6 @@ window.cancelOtp = function() {
     otpInputs.forEach(i => i.value = ''); 
 };
 
-// ==========================================
-// אימות ה-OTP המאובטח
-// ==========================================
 document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
     let enteredCode = Array.from(otpInputs).map(i => i.value).join('');
     if (enteredCode.length !== 6) { alert("אנא הזיני את כל 6 הספרות"); return; }
@@ -329,17 +324,15 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
         if (result.data && result.data.success) {
             await auth.signInWithCustomToken(result.data.token);
             
-            // 🌟 התיקון הקריטי (Race Condition Fix): מחכים שפיירבייס יאשר את תג האבטחה! 🌟
             await new Promise((resolve) => {
                 const unsub = auth.onAuthStateChanged(user => {
                     if (user) {
-                        unsub(); // ברגע שהמשתמש זוהה עם התג, מפסיקים לחכות
+                        unsub();
                         resolve();
                     }
                 });
             });
             
-            // עכשיו הגישה בטוחה ב-100%
             const userDoc = await db.collection("users").doc(phone).get();
             let userToSave;
             if (userDoc.exists) {
@@ -366,7 +359,6 @@ document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
         }
     } catch (error) {
         console.error("Verification error:", error);
-        // הוספתי פה את השגיאה המפורטת, ככה שאם זה נכשל, נדע מיד למה!
         alert("שגיאה בחיבור: " + error.message);
     } finally {
         btn.innerText = "אימות וכניסה";
@@ -478,7 +470,6 @@ function renderBookingDays() {
     });
 }
 
-// פונקציות עזר לזמנים
 function timeToMins(timeStr) {
     let [h, m] = (timeStr || "00:00").split(':').map(Number);
     return h * 60 + m;
@@ -505,7 +496,6 @@ function renderBookingTimes(shift, dateFormatted) {
     let bs = shift.breakStart ? timeToMins(shift.breakStart) : -1; 
     let be = shift.breakEnd ? timeToMins(shift.breakEnd) : -1;
     
-    // 🔥 התיקון: אנחנו בודקים מול השעות התפוסות הסודיות (busy_slots) בלבד 🔥
     const busySlots = JSON.parse(localStorage.getItem('busySlots')) || []; 
     const bookedApps = busySlots.filter(a => a && a.fullDate === shift.date);
     
