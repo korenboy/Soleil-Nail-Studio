@@ -4,7 +4,10 @@ service cloud.firestore {
     function isAdmin() { return request.auth != null && request.auth.token.admin == true; }
     function isUser() { return request.auth != null; }
 
-    match /settings/{docId} { allow read: if true; allow write: if isAdmin(); }
+    // 🔥 התיקון ה-1: רק העיצוב ציבורי, שאר ההגדרות (כמו מספר מנהלת) סודיות! 🔥
+    match /settings/homeConfig { allow read: if true; allow write: if isAdmin(); }
+    match /settings/{docId} { allow read, write: if isAdmin(); }
+    
     match /shifts/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /treatments/{docId} { allow read: if true; allow write: if isAdmin(); }
     match /finance/{docId} { allow read, write: if isAdmin(); }
@@ -12,15 +15,20 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if isAdmin() || (isUser() && request.auth.uid == userId);
     }
+    
     match /waitlist/{docId} {
-      allow create: if isUser();
+      // 🔥 התיקון ה-2: לקוחה יכולה להירשם להמתנה רק עם הטלפון שלה! 🔥
+      allow create: if isAdmin() || (isUser() && request.auth.uid == request.resource.data.clientPhone);
       allow read, update, delete: if isAdmin();
     }
+    
     match /appointments/{docId} {
       allow read: if isAdmin() || (isUser() && resource.data.clientPhone == request.auth.uid);
-      allow create: if isUser();
+      // 🔥 התיקון ה-2: לקוחה יכולה לקבוע תור רק עם הטלפון שלה! 🔥
+      allow create: if isAdmin() || (isUser() && request.auth.uid == request.resource.data.clientPhone);
       allow update, delete: if isAdmin() || (isUser() && resource.data.clientPhone == request.auth.uid);
     }
+    
     match /busy_slots/{docId} {
       allow read: if true;
       allow write: if false;
