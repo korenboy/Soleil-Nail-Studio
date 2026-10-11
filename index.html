@@ -51,7 +51,7 @@
     <div id="iosInstallPrompt" style="display: none; background: #fff; padding: 15px; border-radius: 0 0 20px 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); text-align: center; border-bottom: 3px solid #C2A878; z-index: 100; position: absolute; top: 0; width: 100%;">
         <p style="margin: 0 0 5px 0; font-weight: bold; font-size: 16px;">התקיני אותי כאפליקציה! 📱</p>
         <p style="margin: 0; font-size: 13px; color: #555;">לחצי למטה על כפתור השיתוף (מרובע עם חץ למעלה) ואז בחרי <strong>"הוסף למסך הבית"</strong>.</p>
-        <button onclick="document.getElementById('iosInstallPrompt').style.display='none'" style="margin-top: 10px; background: none; border: none; color: #999; text-decoration: underline;">הבנתי, סגור</button>
+        <button id="closeIosPromptBtn" style="margin-top: 10px; background: none; border: none; color: #999; text-decoration: underline;">הבנתי, סגור</button>
     </div>
 
     <div id="loginScreen" class="screen-container active">
@@ -79,7 +79,7 @@
             <input type="tel" maxlength="1" pattern="[0-9]*" inputmode="numeric" class="otp-digit">
         </div>
         <button class="primary-btn" id="verifyOtpBtn">אימות וכניסה</button>
-        <button style="background: none; border: none; color: #C2A878; text-decoration: underline; margin-top: 15px; cursor: pointer;" onclick="cancelOtp()">טעות במספר? חזרה</button>
+        <button id="cancelOtpBtn" style="background: none; border: none; color: #C2A878; text-decoration: underline; margin-top: 15px; cursor: pointer;">טעות במספר? חזרה</button>
       </div>
     </div>
 
@@ -195,55 +195,6 @@
   </div> <!-- סגירה של app-screen -->
 </div> <!-- סגירה של phone-mockup -->
 
-<script src="app.js?v=2.1"></script>
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-      try {
-          const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-          const isStandalone = () => ('standalone' in window.navigator) && (window.navigator.standalone);
-          if (isIos() && !isStandalone()) {
-              const promptEl = document.getElementById('iosInstallPrompt');
-              if (promptEl) promptEl.style.display = 'block';
-          }
-      } catch(e) { console.error("Banner check failed", e); }
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const action = urlParams.get('action');
-      const actionAppId = urlParams.get('id');
-
-      if (action === 'view_appointments') {
-          sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
-          window.history.replaceState(null, null, window.location.pathname);
-          
-          if (localStorage.getItem('currentUser')) {
-              setTimeout(() => {
-                  if(document.getElementById('goToMyAppointments')) {
-                      document.getElementById('goToMyAppointments').click();
-                      sessionStorage.removeItem('redirectAfterLogin');
-                  }
-              }, 500);
-          }
-      }
-
-      if (action === 'confirm_arrival' && actionAppId) {
-          sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
-          window.history.replaceState(null, null, window.location.pathname);
-
-          firebase.firestore().collection("appointments").doc(actionAppId.toString()).update({
-              clientConfirmed: true,
-              statusText: "אישרה הגעה ✅"
-          }).then(() => {
-              alert("איזה כיף, אישרת את הגעתך! נטלי מחכה לך בקליניקה 🤍");
-              
-              if (localStorage.getItem('currentUser') && document.getElementById('goToMyAppointments')) {
-                  document.getElementById('goToMyAppointments').click();
-                  sessionStorage.removeItem('redirectAfterLogin');
-              }
-          }).catch(err => {
-              console.error("Error auto-confirming:", err);
-          });
-      }
-  });
-</script>
+<script src="app.js?v=2.2"></script>
 </body>
 </html>

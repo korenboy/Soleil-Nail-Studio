@@ -1,6 +1,6 @@
 // חיבור ל-Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyD7-YseNYz58r2GlnpFxF4IJdi0bUW8_aw",
+  apiKey: atob("QUl6YVN5RDctWXNlTll6NThyMkdsbnBGeEY0SUpkaTBiVVc4X2F3"),
   authDomain: "nails-by-natali.firebaseapp.com",
   projectId: "nails-by-natali",
   storageBucket: "nails-by-natali.firebasestorage.app",
@@ -639,4 +639,66 @@ document.getElementById('addToCalendarBtn')?.addEventListener('click', () => {
   const a = document.createElement('a'); 
   a.href = url; a.download = 'Natali_Appointment.ics'; 
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
+// Event listener for closing iOS banner
+document.getElementById('closeIosPromptBtn')?.addEventListener('click', () => {
+    const el = document.getElementById('iosInstallPrompt');
+    if (el) el.style.display = 'none';
+});
+
+// Event listener for cancelling OTP ( טעות במספר )
+document.getElementById('cancelOtpBtn')?.addEventListener('click', () => {
+    if (typeof window.cancelOtp === 'function') {
+        window.cancelOtp();
+    }
+});
+
+// Initialization & deep-link routing
+document.addEventListener("DOMContentLoaded", () => {
+    try {
+        const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+        const isStandalone = () => ('standalone' in window.navigator) && (window.navigator.standalone);
+        if (isIos() && !isStandalone()) {
+            const promptEl = document.getElementById('iosInstallPrompt');
+            if (promptEl) promptEl.style.display = 'block';
+        }
+    } catch(e) { console.error("Banner check failed", e); }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
+    const actionAppId = urlParams.get('id');
+
+    if (action === 'view_appointments') {
+        sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
+        window.history.replaceState(null, null, window.location.pathname);
+        
+        if (localStorage.getItem('currentUser')) {
+            setTimeout(() => {
+                if(document.getElementById('goToMyAppointments')) {
+                    document.getElementById('goToMyAppointments').click();
+                    sessionStorage.removeItem('redirectAfterLogin');
+                }
+            }, 500);
+        }
+    }
+
+    if (action === 'confirm_arrival' && actionAppId) {
+        sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
+        window.history.replaceState(null, null, window.location.pathname);
+
+        firebase.firestore().collection("appointments").doc(actionAppId.toString()).update({
+            clientConfirmed: true,
+            statusText: "אישרה הגעה ✅"
+        }).then(() => {
+            alert("איזה כיף, אישרת את הגעתך! נטלי מחכה לך בקליניקה 🤍");
+            
+            if (localStorage.getItem('currentUser') && document.getElementById('goToMyAppointments')) {
+                document.getElementById('goToMyAppointments').click();
+                sessionStorage.removeItem('redirectAfterLogin');
+            }
+        }).catch(err => {
+            console.error("Error auto-confirming:", err);
+        });
+    }
 });
