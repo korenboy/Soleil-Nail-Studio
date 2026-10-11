@@ -35,6 +35,8 @@
       "functions",
       "functions/**",
       "README.md",
+      "DNS_RECORDS.md",
+      "*.md",
       "**/node_modules/**"
     ],
     "redirects": [
