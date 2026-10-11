@@ -23,8 +23,71 @@
       "firestore.rules",
       "firestore.indexes.json",
       "storage.rules",
-      "**/.*",
+      ".git",
+      ".git/**",
+      "**/.git/**",
+      ".firebase",
+      ".firebase/**",
+      ".firebaserc",
+      ".gitignore",
+      ".DS_Store",
+      "**/.DS_Store",
+      "functions",
+      "functions/**",
+      "README.md",
       "**/node_modules/**"
+    ],
+    "redirects": [
+      {
+        "source": "/.git",
+        "destination": "/404.html",
+        "type": 301
+      },
+      {
+        "source": "/.git/:path*",
+        "destination": "/404.html",
+        "type": 301
+      }
+    ],
+    "headers": [
+      {
+        "source": "/**",
+        "headers": [
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), microphone=(), geolocation=()"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.firebasestorage.app https://firebasestorage.googleapis.com https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebasestorage.googleapis.com https://*.cloudfunctions.net https://*.run.app wss://*.firebaseio.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/security.txt",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "text/plain; charset=utf-8"
+          }
+        ]
+      }
     ]
   }
 }
