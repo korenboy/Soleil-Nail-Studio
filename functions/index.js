@@ -258,30 +258,47 @@ const { onCall } = require('firebase-functions/v2/https');
     });
 
     exports.onNewAppointment = onDocumentCreated('appointments/{appId}', async (event) => {
-        const app = event.data.data();
-        const appId = event.params.appId;
-        
-        // 1. אם הלקוחה קבעה בעצמה (הסטטוס ממתין) -> נשלח הודעה לנטלי בטלגרם לאישור
-        if (app.status === 'pending') {
-            const text = `🗓 <b>תור חדש ל-Soleil!</b>\n\n👤 ${app.clientName}\n💅 ${app.treatment}\n📅 ${app.date} | ${app.time}\n\n<a href="${ADMIN_APP_URL}?action=approve_app&id=${appId}">✅ לאישור</a>`;
-            await sendTelegramMessage(text);
-        } 
-        // 2. 🔥 התיקון: אם נטלי קבעה ידנית (הסטטוס נוצר מראש כמאושר) -> נשלח SMS ללקוחה
-        else if (app.status === 'approved') {
-            const address = process.env.CLINIC_ADDRESS || "";
-            const msg = `היי ${app.clientName}, נקבע לך תור חדש ב-Soleil! ✨\nניפגש ב-${app.date} בשעה ${app.time}.\nכתובתנו: ${address}`;
-            await sendPulseemSMS(app.clientPhone, msg);
-            console.log(`Manual booking SMS sent to ${app.clientName}`);
+        try {
+            if (!event.data) return null;
+            const app = event.data.data();
+            if (!app) return null;
+            const appId = event.params.appId;
+            
+            // 1. אם הלקוחה קבעה בעצמה (הסטטוס ממתין) -> נשלח הודעה לנטלי בטלגרם לאישור
+            if (app.status === 'pending') {
+                const text = `🗓 <b>תור חדש ל-Soleil!</b>\n\n👤 ${app.clientName || 'לקוחה'}\n💅 ${app.treatment || ''}\n📅 ${app.date || ''} | ${app.time || ''}\n\n<a href="${ADMIN_APP_URL}?action=approve_app&id=${appId}">✅ לאישור</a>`;
+                await sendTelegramMessage(text);
+            } 
+            // 2. אם נטלי קבעה ידנית (הסטטוס נוצר מראש כמאושר) -> נשלח SMS ללקוחה
+            else if (app.status === 'approved') {
+                const phone = normalizePhone(app.clientPhone);
+                if (phone) {
+                    const address = process.env.CLINIC_ADDRESS || "";
+                    const msg = `היי ${app.clientName || ''}, נקבע לך תור חדש ב-Soleil! ✨\nניפגש ב-${app.date || ''} בשעה ${app.time || ''}.\nכתובתנו: ${address}`;
+                    await sendPulseemSMS(phone, msg);
+                    console.log(`Manual booking SMS sent to ${app.clientName || phone}`);
+                }
+            }
+        } catch (err) {
+            console.error("Error in onNewAppointment trigger:", err);
         }
+        return null;
     });
 
     exports.onNewUser = onDocumentCreated('users/{phone}', async (event) => {
-        const user = event.data.data();
-        const phone = event.params.phone;
-        if (user.status === 'pending') {
-            const text = `👥 <b>לקוחה חדשה!</b>\n\n👤 ${user.name}\n📞 ${phone}\n\n<a href="${ADMIN_APP_URL}?action=approve_user&phone=${phone}">✅ לאישור</a>`;
-            await sendTelegramMessage(text);
+        try {
+            if (!event.data) return null;
+            const user = event.data.data();
+            if (!user) return null;
+            const phone = event.params.phone;
+            if (user.status === 'pending') {
+                const text = `👥 <b>לקוחה חדשה!</b>\n\n👤 ${user.name || 'לקוחה'}\n📞 ${phone}\n\n<a href="${ADMIN_APP_URL}?action=approve_user&phone=${phone}">✅ לאישור</a>`;
+                await sendTelegramMessage(text);
+            }
+        } catch (err) {
+            console.error("Error in onNewUser trigger:", err);
         }
+        return null;
     });
 
     // ====== שעון מעורר לתזכורות אוטומטיות ======
@@ -291,10 +308,21 @@ const { onCall } = require('firebase-functions/v2/https');
         timeZone: 'Asia/Jerusalem'
     }, async (event) => {
         try {
-            const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' });
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = formatter.format(tomorrow); 
+            // חישוב תאריך מחר לפי אזור הזמן של ישראל באופן מדויק ומוגן מבאגי UTC
+            const nowParts = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Jerusalem',
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric'
+            }).formatToParts(new Date());
+
+            const y = parseInt(nowParts.find(p => p.type === 'year').value, 10);
+            const m = parseInt(nowParts.find(p => p.type === 'month').value, 10) - 1;
+            const d = parseInt(nowParts.find(p => p.type === 'day').value, 10);
+
+            const todayInIL = new Date(Date.UTC(y, m, d));
+            todayInIL.setUTCDate(todayInIL.getUTCDate() + 1);
+            const tomorrowStr = todayInIL.toISOString().split('T')[0];
             const address = process.env.CLINIC_ADDRESS || "";
 
             const snapshot = await db.collection('appointments')
@@ -303,32 +331,39 @@ const { onCall } = require('firebase-functions/v2/https');
                 .where('reminderSmsSent', '==', false)
                 .get();
 
-            if (snapshot.empty) return;
+            if (snapshot.empty) return null;
 
             for (const doc of snapshot.docs) {
                 const app = doc.data();
-                const confirmLink = `https://nails-by-natali.web.app/?action=confirm_arrival&id=${doc.id}`;
-                const msg = `היי ${app.clientName}, תזכורת לתור ב-Soleil מחר (${app.date}) בשעה ${app.time} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`;
-                const success = await sendPulseemSMS(app.clientPhone, msg);
+                const phone = normalizePhone(app.clientPhone);
+                if (!phone) continue;
+
+                const confirmLink = `https://soleilnailstudio.co.il/?action=confirm_arrival&id=${doc.id}`;
+                const msg = `היי ${app.clientName || ''}, תזכורת לתור ב-Soleil מחר (${app.date || ''}) בשעה ${app.time || ''} ✨\n\nלאישור הגעה לחצי כאן:\n${confirmLink}\n\nכתובתנו: ${address}`;
+                const success = await sendPulseemSMS(phone, msg);
                 if (success) await doc.ref.update({ reminderSmsSent: true });
             }
         } catch (error) {
             console.error("Error in dailySmsReminders:", error);
         }
+        return null;
     });
     // ============================================================================
     // אוטומציה: התראת טלגרם למנהלת + שליחת SMS אוטומטי לרשימת המתנה בעת ביטול תור
     // ============================================================================
     exports.onAppointmentCanceled = onDocumentUpdated('appointments/{appId}', async (event) => {
+        try {
+            if (!event.data || !event.data.before || !event.data.after) return null;
             const before = event.data.before.data();
             const after = event.data.after.data();
+            if (!before || !after) return null;
 
             // בודק אם הסטטוס השתנה עכשיו ל-"canceled" (בוטל)
             if (before.status !== 'canceled' && after.status === 'canceled') {
-                const date = after.date; // לדוגמה: "24.06"
-                const fullDate = after.fullDate; // לדוגמה: "2026-06-24"
-                const time = after.time;
-                const clientName = after.clientName;
+                const date = after.date || ""; // לדוגמה: "24.06"
+                const fullDate = after.fullDate || ""; // לדוגמה: "2026-06-24"
+                const time = after.time || "";
+                const clientName = after.clientName || "לקוחה";
 
                 console.log(`Appointment canceled by ${clientName} on ${date} at ${time}. Starting automation...`);
 
@@ -336,7 +371,6 @@ const { onCall } = require('firebase-functions/v2/https');
                 const telegramMsg = `❌ ביטול תור:\nהלקוחה ${clientName} הרגע ביטלה את התור שלה בתאריך ${date} בשעה ${time}.\nהמערכת בודקת כעת את רשימת ההמתנה.`;
                 
                 try {
-                    // מניח שיש לך פונקציה כזו ב-index.js, אם קראת לה בשם אחר, שנה כאן
                     await sendTelegramMessage(telegramMsg); 
                 } catch (err) {
                     console.error("Failed to send Telegram cancel alert", err);
@@ -344,28 +378,34 @@ const { onCall } = require('firebase-functions/v2/https');
 
                 // 2. חיפוש בנות ברשימת ההמתנה של אותו תאריך
                 try {
-                    const waitlistSnapshot = await admin.firestore().collection('waitlist').where('fullDate', '==', fullDate).get();
+                    const waitlistSnapshot = await db.collection('waitlist').where('fullDate', '==', fullDate).get();
                     
                     if (!waitlistSnapshot.empty) {
-                        const phonesToAlert = [];
+                        const phonesToAlert = new Set();
                         waitlistSnapshot.forEach(doc => {
-                            let phone = doc.data().clientPhone;
-                            if (phone) phonesToAlert.push(phone);
+                            const rawPhone = doc.data().clientPhone;
+                            const p = normalizePhone(rawPhone);
+                            if (p) phonesToAlert.add(p);
                         });
 
+                        const uniquePhones = Array.from(phonesToAlert);
+
                         // 3. שליחת SMS לבנות הממתינות
-                        if (phonesToAlert.length > 0) {
+                        if (uniquePhones.length > 0) {
                             const smsMsg = `היי! התפנה תור מפתיע בקליניקה בתאריך ${date} בשעה ${time}. מהרי לתפוס אותו באפליקציה לפני שייתפס: https://soleilnailstudio.co.il`;
                             
-                            // קריאה לפונקציית ה-SMS עבור כל לקוחה ברשימה
-                            for (const phone of phonesToAlert) {
+                            for (const phone of uniquePhones) {
                                 await sendPulseemSMS(phone, smsMsg);
                             }
                             
-                            console.log(`Waitlist SMS sent to ${phonesToAlert.length} clients.`);
+                            console.log(`Waitlist SMS sent to ${uniquePhones.length} clients.`);
                             
                             // עדכון נוסף לנטלי ש-SMS נשלח
-                            await sendTelegramMessage(`✅ הודעת SMS נשלחה אוטומטית ל-${phonesToAlert.length} בנות מרשימת ההמתנה!`);
+                            try {
+                                await sendTelegramMessage(`✅ הודעת SMS נשלחה אוטומטית ל-${uniquePhones.length} בנות מרשימת ההמתנה!`);
+                            } catch (tgErr) {
+                                console.error("Failed to send Telegram waitlist count alert", tgErr);
+                            }
                         }
                     } else {
                         console.log("No one on the waitlist for this date.");
@@ -374,28 +414,38 @@ const { onCall } = require('firebase-functions/v2/https');
                     console.error("Failed to process waitlist automation", err);
                 }
             }
-            
-            return null;
-        });
+        } catch (error) {
+            console.error("Error in onAppointmentCanceled trigger:", error);
+        }
+        return null;
+    });
 
     // ============================================================================
     // אוטומציה: שליחת SMS ללקוחה כשהתור מאושר
     // ============================================================================
     exports.onAppointmentApproved = onDocumentUpdated('appointments/{appId}', async (event) => {
-        const before = event.data.before.data();
-        const after = event.data.after.data();
+        try {
+            if (!event.data || !event.data.before || !event.data.after) return null;
+            const before = event.data.before.data();
+            const after = event.data.after.data();
+            if (!before || !after) return null;
 
-        // בודק אם הסטטוס השתנה מ-pending ל-approved
-        if (before.status !== 'approved' && after.status === 'approved') {
-            const clientName = after.clientName;
-            const phone = after.clientPhone;
-            const date = after.date;
-            const time = after.time;
-            const address = process.env.CLINIC_ADDRESS || "";
+            // בודק אם הסטטוס השתנה מ-pending ל-approved
+            if (before.status !== 'approved' && after.status === 'approved') {
+                const clientName = after.clientName || "";
+                const phone = normalizePhone(after.clientPhone);
+                const date = after.date || "";
+                const time = after.time || "";
+                const address = process.env.CLINIC_ADDRESS || "";
 
-            const msg = `היי ${clientName}, התור שלך ב-Soleil אושר! ✨\nניפגש ב-${date} בשעה ${time}.\nכתובתנו: ${address}`;
-            await sendPulseemSMS(phone, msg);
-            console.log(`Approval SMS sent to ${clientName} for ${date} at ${time}`);
+                if (phone) {
+                    const msg = `היי ${clientName}, התור שלך ב-Soleil אושר! ✨\nניפגש ב-${date} בשעה ${time}.\nכתובתנו: ${address}`;
+                    await sendPulseemSMS(phone, msg);
+                    console.log(`Approval SMS sent to ${clientName} for ${date} at ${time}`);
+                }
+            }
+        } catch (error) {
+            console.error("Error in onAppointmentApproved trigger:", error);
         }
         return null;
     });
@@ -405,27 +455,32 @@ const { onCall } = require('firebase-functions/v2/https');
     // ============================================================================
     exports.autoRecordIncome = onSchedule({ schedule: '0 * * * *', timeZone: 'Asia/Jerusalem' }, async (event) => {
         try {
-            const nowIL = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
-            
-            // חישוב היום הנוכחי
-            const currentYear = nowIL.getFullYear();
-            const currentMonth = String(nowIL.getMonth() + 1).padStart(2, '0');
-            const currentDay = String(nowIL.getDate()).padStart(2, '0');
-            const todayStr = `${currentYear}-${currentMonth}-${currentDay}`;
-            
-            // חישוב של תאריך אתמול (למקרה שהשעה התחלפה ל-00:00 ותור הסתיים מאוחר)
-            const yesterdayIL = new Date(nowIL);
-            yesterdayIL.setDate(yesterdayIL.getDate() - 1);
-            const yYear = yesterdayIL.getFullYear();
-            const yMonth = String(yesterdayIL.getMonth() + 1).padStart(2, '0');
-            const yDay = String(yesterdayIL.getDate()).padStart(2, '0');
-            const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
+            const nowParts = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Jerusalem',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).formatToParts(new Date());
 
-            const currentHour = String(nowIL.getHours()).padStart(2, '0');
-            const currentMin = String(nowIL.getMinutes()).padStart(2, '0');
+            const getPart = type => (nowParts.find(p => p.type === type) || {}).value || '00';
+            const currentYear = getPart('year');
+            const currentMonth = getPart('month');
+            const currentDay = getPart('day');
+            const currentHour = getPart('hour');
+            const currentMin = getPart('minute');
+
+            const todayStr = `${currentYear}-${currentMonth}-${currentDay}`;
             const currentTimeStr = `${currentHour}:${currentMin}`;
 
-            // 🔥 התיקון המטורף: מושכים אך ורק תורים של "היום" ושל "אתמול" במקום את כל ההיסטוריה! 🔥
+            // חישוב תאריך אתמול באזור זמן ירושלים
+            const todayDate = new Date(Date.UTC(parseInt(currentYear, 10), parseInt(currentMonth, 10) - 1, parseInt(currentDay, 10)));
+            todayDate.setUTCDate(todayDate.getUTCDate() - 1);
+            const yesterdayStr = todayDate.toISOString().split('T')[0];
+
+            // מושכים אך ורק תורים של "היום" ושל "אתמול"
             const snapshot = await db.collection('appointments')
                 .where('fullDate', 'in', [todayStr, yesterdayStr])
                 .get();
@@ -446,7 +501,7 @@ const { onCall } = require('firebase-functions/v2/https');
             snapshot.forEach(doc => {
                 const app = doc.data();
                 
-                // סינון בקוד: מטפלים רק בתורים מאושרים שעדיין לא נרשמו כהכנסה
+                // סינון: רק תורים מאושרים שעדיין לא נרשמו כהכנסה
                 if (app.status !== 'approved') return;
                 if (app.financeRecorded) return;
 
@@ -455,22 +510,24 @@ const { onCall } = require('firebase-functions/v2/https');
                 if (!isConfirmed) return;
 
                 // בודקים אם שעת התור עברה
-                const isPastDay = app.fullDate < todayStr; // תמיד נכון עבור אתמול
+                const isPastDay = app.fullDate < todayStr;
                 const isPastTimeToday = (app.fullDate === todayStr && app.time <= currentTimeStr);
 
                 if (isPastDay || isPastTimeToday) {
                     const price = prices[app.treatment] || 0;
                     
-                    const finRef = db.collection('finance').doc();
+                    // אידמפוטנטיות: שימוש במזהה דטרמיניסטי app_<appId>
+                    const finRef = db.collection('finance').doc(`app_${doc.id}`);
                     batch.set(finRef, {
                         id: finRef.id,
+                        appointmentId: doc.id,
                         type: 'income',
                         amount: price,
-                        desc: `טיפול: ${app.treatment} (${app.clientName})`,
+                        desc: `טיפול: ${app.treatment} (${app.clientName || 'לקוחה'})`,
                         date: app.fullDate,
-                        month: app.fullDate.substring(0, 7), // שומר על סינון החודש לרואה חשבון
+                        month: (app.fullDate || '').substring(0, 7),
                         timestamp: admin.firestore.FieldValue.serverTimestamp()
-                    });
+                    }, { merge: true });
 
                     batch.update(doc.ref, { financeRecorded: true });
                     addedCount++;
@@ -495,17 +552,18 @@ const { onCall } = require('firebase-functions/v2/https');
     const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 
     async function syncAppointmentToGoogleCalendar(appId, appData) {
+        if (!GOOGLE_CALENDAR_ID) {
+            return;
+        }
         try {
-            // מתחבר אוטומטית בענן עם הרשאות השרת של Firebase
             const auth = new google.auth.GoogleAuth({
                 scopes: ['https://www.googleapis.com/auth/calendar']
             });
             const calendar = google.calendar({ version: 'v3', auth });
             
-            // גוגל דורש ID ייחודי בפורמט מיוחד, אז נהפוך את ה-ID שלנו למבנה חוקי
             const gEventId = Buffer.from(appId).toString('hex'); 
             
-            // אם התור בוטל או שזה לא סטטוס מאושר - נמחק אותו מהיומן (אם הוא קיים)
+            // אם התור בוטל או שזה לא סטטוס מאושר - נמחק אותו מהיומן
             if (!appData || appData.status !== 'approved') {
                 try {
                     await calendar.events.delete({ calendarId: GOOGLE_CALENDAR_ID, eventId: gEventId });
@@ -518,30 +576,27 @@ const { onCall } = require('firebase-functions/v2/https');
 
             // חישוב שעות וזמנים
             const [startH, startM] = (appData.time || "00:00").split(':').map(Number);
-            const duration = parseInt(appData.duration || 60);
-            const endMin = startH * 60 + startM + duration;
+            const duration = parseInt(appData.duration || 60, 10);
+            const endMin = (startH || 0) * 60 + (startM || 0) + duration;
             const endH = String(Math.floor(endMin / 60)).padStart(2, '0');
             const endM = String(endMin % 60).padStart(2, '0');
 
-            // פורמט תאריך ושעה שגוגל דורש (כולל אזור זמן של ישראל)
-            const startTimeStr = `${appData.fullDate}T${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}:00`;
+            const startTimeStr = `${appData.fullDate}T${String(startH || 0).padStart(2, '0')}:${String(startM || 0).padStart(2, '0')}:00`;
             const endTimeStr = `${appData.fullDate}T${endH}:${endM}:00`;
 
             const event = {
-                summary: `💅 ${appData.clientName} - ${appData.treatment}`,
-                description: `טלפון: ${appData.clientPhone}\nטיפול: ${appData.treatment}\nמשך: ${duration} דק'`,
+                summary: `💅 ${appData.clientName || 'לקוחה'} - ${appData.treatment || ''}`,
+                description: `טלפון: ${appData.clientPhone || ''}\nטיפול: ${appData.treatment || ''}\nמשך: ${duration} דק'`,
                 start: { dateTime: startTimeStr, timeZone: 'Asia/Jerusalem' },
                 end: { dateTime: endTimeStr, timeZone: 'Asia/Jerusalem' },
-                colorId: '4' // צבע ורוד-אדמדם נעים ביומן גוגל
+                colorId: '4'
             };
 
             try {
-                // קודם ננסה למשוך את האירוע. אם קיים - נעדכן אותו
                 await calendar.events.get({ calendarId: GOOGLE_CALENDAR_ID, eventId: gEventId });
                 await calendar.events.update({ calendarId: GOOGLE_CALENDAR_ID, eventId: gEventId, resource: event });
                 console.log(`Updated event ${gEventId} in Google Calendar`);
             } catch (e) {
-                // אם זרק שגיאה 404, סימן שהתור לא ביומן, אז ניצור חדש!
                 if (e.code === 404) {
                     event.id = gEventId;
                     await calendar.events.insert({ calendarId: GOOGLE_CALENDAR_ID, resource: event });
@@ -555,43 +610,50 @@ const { onCall } = require('firebase-functions/v2/https');
         }
     }
 
-    // פונקציית האזנה שמזהה *כל* שינוי בתור (יצירה, עריכת שעה או ביטול) ומפעילה את הסנכרון
+    // פונקציית האזנה שמזהה *כל* שינוי בתור ומפעילה את הסנכרון
     exports.googleCalendarSync = onDocumentWritten('appointments/{appId}', async (event) => {
-        const appId = event.params.appId;
-        
-        // אם התור נמחק לגמרי מהדאטהבייס
-        if (!event.data.after.exists) {
-            await syncAppointmentToGoogleCalendar(appId, { status: 'canceled' });
-            return;
+        try {
+            const appId = event.params.appId;
+            
+            if (!event.data || !event.data.after || !event.data.after.exists) {
+                await syncAppointmentToGoogleCalendar(appId, { status: 'canceled' });
+                return null;
+            }
+            
+            const appData = event.data.after.data();
+            await syncAppointmentToGoogleCalendar(appId, appData);
+        } catch (error) {
+            console.error("Error in googleCalendarSync:", error);
         }
-        
-        const appData = event.data.after.data();
-        await syncAppointmentToGoogleCalendar(appId, appData);
+        return null;
     });
 
     // ============================================================================
-    // 🚀 אוטומציה חדשה: סנכרון זמנים תפוסים (ללא פרטי לקוחות) עבור יומן הלקוחות
+    // 🚀 אוטומציה: סנכרון זמנים תפוסים (ללא פרטי לקוחות) עבור יומן הלקוחות
     // ============================================================================
     exports.syncBusySlots = onDocumentWritten('appointments/{appId}', async (event) => {
-        const appId = event.params.appId;
-        
-        // אם התור נמחק לגמרי
-        if (!event.data.after.exists) {
-            await db.collection('busy_slots').doc(appId).delete();
-            return;
+        try {
+            const appId = event.params.appId;
+            
+            if (!event.data || !event.data.after || !event.data.after.exists) {
+                await db.collection('busy_slots').doc(appId).delete();
+                return null;
+            }
+            
+            const appData = event.data.after.data();
+            
+            if (!appData || appData.status === 'canceled') {
+                await db.collection('busy_slots').doc(appId).delete();
+            } else {
+                await db.collection('busy_slots').doc(appId).set({
+                    id: appId,
+                    fullDate: appData.fullDate || '',
+                    time: appData.time || '',
+                    duration: appData.duration || 60
+                }, { merge: true });
+            }
+        } catch (error) {
+            console.error("Error in syncBusySlots:", error);
         }
-        
-        const appData = event.data.after.data();
-        
-        // אם התור בוטל, נשחרר את הזמן מהיומן הציבורי
-        if (appData.status === 'canceled') {
-            await db.collection('busy_slots').doc(appId).delete();
-        } else {
-            // שומרים רק תאריך, שעה ומשך. בלי שמות וטלפונים! (שומר על פרטיות)
-            await db.collection('busy_slots').doc(appId).set({
-                fullDate: appData.fullDate,
-                time: appData.time,
-                duration: appData.duration
-            });
-        }
+        return null;
     });

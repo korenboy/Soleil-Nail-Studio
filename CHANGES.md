@@ -105,7 +105,40 @@
   - `node tests/normalizePhone.test.js` — 22/22 עברו בהצלחה.
   - `node tests/handlers.test.js` — עבר בהצלחה מלאה.
   - `node --check functions/index.js` — עבר ללא שגיאות.
-  - `node --check app.js` — עבר ללא שגיאות.
+  - `node --check app.js` — עבר ללא שגיאות.---
 
-
+## שלב 4: הקשחת טריגרים ברקע ואידמפוטנטיות בענן (`fix(functions): harden background triggers and ensure idempotency`)
+- **מטרה**: הקשחת כל טריגרי הענן (Cloud Functions v2 Background Triggers & Scheduled Tasks) מפני נפילות בלתי צפויות, באגי אזור זמן, כפילויות תנועות כספיות (Idempotency) וקריסות ביומן גוגל.
+- **קבצים שנערכו**:
+  1. `functions/index.js`:
+     - `onNewAppointment`:
+       - הוספת בדיקות `if (!event.data) return null;` ו-`const app = event.data.data(); if (!app) return null;`.
+       - ברירת מחדל בטוחה לשדות חסרים (`clientName`, `treatment`, `date`, `time`).
+       - נרמול טלפון הלקוחה לפני שליחת SMS בקביעה ידנית.
+       - עטיפה ב-`try / catch` למניעת חזרות בלתי נשלטות של הטריגר.
+     - `onNewUser`:
+       - הוספת בדיקות בטיחות `if (!event.data) return null;` ו-`if (!user) return null;`.
+       - עטיפה ב-`try / catch`.
+     - `dailySmsReminders`:
+       - חישוב תאריך מחר מדויק באמצעות `Intl.DateTimeFormat` לפי אזור זמן ירושלים (`Asia/Jerusalem`) למניעת באגי מעבר יממה ב-UTC.
+       - עדכון כתובת האתר הרשמית בקישור לאישור הגעה (`https://soleilnailstudio.co.il/?action=confirm_arrival&id=...`).
+       - נרמול טלפון לפני שליחת ה-SMS.
+     - `onAppointmentCanceled`:
+       - בדיקות קיום `event.data.before` ו-`event.data.after`.
+       - עטיפת שליחת הודעת טלגרם ב-`try / catch` נפרד כדי שתקלת טלגרם לא תפגע בריצת רשימת ההמתנה.
+       - שליפת רשימת המתנה דרך `db.collection('waitlist')` עם נרמול טלפונים דרך `Set` למניעת שליחת כפילויות לאותו מספר.
+     - `onAppointmentApproved`:
+       - בדיקות קיום נתונים ונרמול טלפון הלקוחה לפני שליחת SMS אישור.
+     - `autoRecordIncome`:
+       - אידמפוטנטיות מוחלטת: מעבר מיצירת מסמכים עם מזהה אקראי למזהה דטרמיניסטי קבוע `doc('app_' + doc.id)` עם `{ merge: true }` וסימון `appointmentId`. אם הטריגר רץ שוב או מתוזמן מחדש, הוא מעדכן את המסמך הקיים ולא יוצר שום כפילות בהכנסות.
+       - חישוב תאריכי "היום" ו"אתמול" באזור זמן ישראל.
+     - `syncAppointmentToGoogleCalendar` ו-`googleCalendarSync`:
+       - הוספת בדיקת בטיחות: אם `GOOGLE_CALENDAR_ID` אינו מוגדר בסביבה, הפונקציה חוזרת מיד בשקט ללא שגיאות וללא רישום מיותר של לוגים.
+       - בדיקות קיום `event.data.after` לפני סנכרון או מחיקה.
+     - `syncBusySlots`:
+       - בדיקות קיום `event.data.after`. מחיקת תור מבוטל או תור שנמחק מ-`busy_slots`, ושמירת שדות מינימליים בלבד ללא שום פרטי לקוחה (תאריך, שעה, משך) לשמירה על פרטיות.
+- **בדיקות תקינות שהורצו**:
+  - `node --check functions/index.js` — עבר ללא שגיאות.
+  - `node tests/normalizePhone.test.js` — 22/22 עברו בהצלחה.
+  - `node tests/handlers.test.js` — 77/77 עברו בהצלחה.
 
