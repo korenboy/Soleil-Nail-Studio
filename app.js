@@ -257,6 +257,8 @@ let pendingUserDetails = null;
 
 document.getElementById('requestOtpBtn')?.addEventListener('click', async () => {
     const nameInput = document.getElementById('loginName')?.value.trim() || ""; 
+    const phoneInput = document.getElementById('loginPhone')?.value.trim() || "";
+    if (nameInput.length < 2) { alert("❌ אנא הכניסי שם (לפחות 2 תווים)."); return; }
     const cleanPhone = normalizePhone(phoneInput);
     if (!cleanPhone) { alert("❌ אנא הכניסי מספר טלפון נייד ישראלי תקין."); return; }
     
@@ -595,7 +597,21 @@ document.getElementById('approveTermsBtn')?.addEventListener('click', () => {
   
   const appId = Date.now().toString();
   const treatmentDur = window.selectedTreatmentDuration || 60;
-  const newAppointment = { id: appId, clientName: currentUserName || currentUser.name, clientPhone: currentUserPhone || currentUser.phone, treatment: selectedTreatment, duration: treatmentDur, date: selectedDayDisplay, fullDate: selectedFullDate, time: selectedTime, status: 'pending', statusText: 'מחכה לאישור ⏳', clientConfirmed: false, notes: document.getElementById('clientNotes').value.trim() || "" };  
+  const clientPhone = (auth.currentUser ? auth.currentUser.uid : (currentUserPhone || currentUser.phone));
+  const newAppointment = { 
+      id: appId, 
+      clientName: currentUserName || currentUser.name || "לקוחה", 
+      clientPhone: clientPhone, 
+      treatment: selectedTreatment, 
+      duration: treatmentDur, 
+      date: selectedDayDisplay, 
+      fullDate: selectedFullDate, 
+      time: selectedTime, 
+      status: 'pending', 
+      statusText: 'מחכה לאישור ⏳', 
+      clientConfirmed: false, 
+      notes: document.getElementById('clientNotes')?.value.trim() || "" 
+  };  
   
   db.collection("appointments").doc(appId).set(newAppointment).then(() => {
       try {
@@ -696,18 +712,31 @@ document.addEventListener("DOMContentLoaded", () => {
         sessionStorage.setItem('redirectAfterLogin', 'myAppointments');
         window.history.replaceState(null, null, window.location.pathname);
 
-        firebase.firestore().collection("appointments").doc(actionAppId.toString()).update({
-            clientConfirmed: true,
-            statusText: "אישרה הגעה ✅"
-        }).then(() => {
-            alert("איזה כיף, אישרת את הגעתך! נטלי מחכה לך בקליניקה 🤍");
-            
-            if (localStorage.getItem('currentUser') && document.getElementById('goToMyAppointments')) {
-                document.getElementById('goToMyAppointments').click();
-                sessionStorage.removeItem('redirectAfterLogin');
-            }
-        }).catch(err => {
-            console.error("Error auto-confirming:", err);
-        });
+        const tryConfirmArrival = () => {
+            firebase.firestore().collection("appointments").doc(actionAppId.toString()).update({
+                clientConfirmed: true,
+                statusText: "אישרה הגעה ✅"
+            }).then(() => {
+                alert("איזה כיף, אישרת את הגעתך! נטלי מחכה לך בקליניקה 🤍");
+                
+                if (localStorage.getItem('currentUser') && document.getElementById('goToMyAppointments')) {
+                    document.getElementById('goToMyAppointments').click();
+                    sessionStorage.removeItem('redirectAfterLogin');
+                }
+            }).catch(err => {
+                console.error("Error auto-confirming arrival:", err);
+            });
+        };
+
+        if (auth.currentUser) {
+            tryConfirmArrival();
+        } else {
+            const unsub = auth.onAuthStateChanged(user => {
+                if (user) {
+                    unsub();
+                    tryConfirmArrival();
+                }
+            });
+        }
     }
 });

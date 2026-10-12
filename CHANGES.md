@@ -176,3 +176,22 @@
 - **בדיקות תקינות שהורצו**:
   - `node tests/normalizePhone.test.js` — 22/22 עברו בהצלחה.
   - `node tests/handlers.test.js` — 77/77 עברו בהצלחה.
+
+---
+
+## שלב 6: הקשחת אפליקציית הלקוחות וזרימת התורים (`fix(client): harden client appointment booking and auth flow`)
+- **מטרה**: מניעת שגיאות זמן-ריצה בזרימת ההתחברות וה-OTP, סנכרון תקין מול כללי האבטחה של Firestore בעת קביעת או ביטול תור, וטיפול יציב בקישורי אישור הגעה (`action=confirm_arrival`).
+- **קבצים שנערכו**:
+  1. `app.js`:
+     - תיקון חילוץ שדה הטלפון בטופס ה-OTP (`phoneInput`): הבטחת שליפת ערך שדה הקלט לפני קריאה ל-`normalizePhone`.
+     - שדרוג יצירת תור חדש:
+       - שימוש ב-`auth.currentUser.uid` המאומת כערך עבור `clientPhone` למניעת חוסר התאמה מול כללי Firestore.
+       - ניווט בטוח (`?.`) על שדה ההערות (`clientNotes`) וברירת מחדל בטוחה לשם הלקוחה.
+     - שדרוג אישור הגעה אוטומטי מקישורי SMS (`action === 'confirm_arrival'`):
+       - בדיקת סטטוס `auth.currentUser`. אם המשתמשת עדיין בטעינת Auth, האזנה ל-`auth.onAuthStateChanged` כדי להפעיל את העדכון מיד עם שחזור הסשן ללא שגיאות הרשאה.
+  2. `firestore.rules`:
+     - הרחבת רשימת השדות המורשים לעדכון בתור ע"י לקוחה לכלול גם את `cancelSource` (מאפשר רישום `cancelSource: 'client'` בעת ביטול תור ע"י לקוחה).
+- **בדיקות תקינות שהורצו**:
+  - `node --check app.js` — עבר ללא שגיאות.
+  - `node tests/normalizePhone.test.js` — 22/22 עברו בהצלחה.
+  - `node tests/handlers.test.js` — 77/77 עברו בהצלחה.

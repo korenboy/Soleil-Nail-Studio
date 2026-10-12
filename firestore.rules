@@ -108,7 +108,7 @@ service cloud.firestore {
         isUser() &&
         resource.data.clientPhone == request.auth.uid &&
         request.resource.data.clientPhone == resource.data.clientPhone &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusText', 'clientConfirmed']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusText', 'clientConfirmed', 'cancelSource']) &&
         (request.resource.data.status == resource.data.status || request.resource.data.status == 'canceled')
       );
 
