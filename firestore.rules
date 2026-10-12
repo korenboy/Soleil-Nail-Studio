@@ -1,41 +1,143 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAdmin() { return request.auth != null && request.auth.token.admin == true; }
-    function isUser() { return request.auth != null; }
-
-    // 🔥 התיקון ה-1: רק העיצוב ציבורי, שאר ההגדרות (כמו מספר מנהלת) סודיות! 🔥
-    match /settings/homeConfig { allow read: if true; allow write: if isAdmin(); }
-    match /settings/{docId} { allow read, write: if isAdmin(); }
-    
-    match /shifts/{docId} { allow read: if true; allow write: if isAdmin(); }
-    match /treatments/{docId} { allow read: if true; allow write: if isAdmin(); }
-    match /finance/{docId} { allow read, write: if isAdmin(); }
-    
-    match /users/{userId} {
-      allow read, write: if isAdmin() || (isUser() && request.auth.uid == userId);
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
     }
-    
+    function isUser() {
+      return request.auth != null;
+    }
+
+    // ===============================================================
+    // Settings & Configuration
+    // ===============================================================
+    // homeConfig: Public read for client app branding (colors, texts, hours). Admin write only.
+    match /settings/homeConfig {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    // All other settings (especially adminConfig containing private admin phone): Admin only!
+    match /settings/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ===============================================================
+    // Shifts & Treatments
+    // ===============================================================
+    match /shifts/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /treatments/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ===============================================================
+    // Finance
+    // ===============================================================
+    match /finance/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ===============================================================
+    // Users Collection
+    // ===============================================================
+    match /users/{userId} {
+      // User can only read their own profile; Admin can read all
+      allow read: if isAdmin() || (isUser() && request.auth.uid == userId);
+      // New user signup: only allows status 'pending' matching auth phone (no privilege escalation)
+      allow create: if isAdmin() || (
+        isUser() &&
+        request.auth.uid == userId &&
+        request.resource.data.phone == userId &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() <= 60
+      );
+      // User update: cannot change status or phone (cannot self-approve or unblock)
+      allow update: if isAdmin() || (
+        isUser() &&
+        request.auth.uid == userId &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.phone == resource.data.phone &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() <= 60
+      );
+      // Delete: admin only
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // Waitlist Collection
+    // ===============================================================
     match /waitlist/{docId} {
-      // 🔥 התיקון ה-2: לקוחה יכולה להירשם להמתנה רק עם הטלפון שלה! 🔥
-      allow create: if isAdmin() || (isUser() && request.auth.uid == request.resource.data.clientPhone);
+      // Clients can only register themselves with their authenticated phone
+      allow create: if isAdmin() || (
+        isUser() &&
+        request.auth.uid == request.resource.data.clientPhone &&
+        request.resource.data.clientPhone is string &&
+        request.resource.data.fullDate is string
+      );
+      // Management & reading: Admin only
       allow read, update, delete: if isAdmin();
     }
-    
+
+    // ===============================================================
+    // Appointments Collection
+    // ===============================================================
     match /appointments/{docId} {
+      // User can only read appointments where clientPhone matches their authenticated UID
       allow read: if isAdmin() || (isUser() && resource.data.clientPhone == request.auth.uid);
-      // 🔥 התיקון ה-2: לקוחה יכולה לקבוע תור רק עם הטלפון שלה! 🔥
-      allow create: if isAdmin() || (isUser() && request.auth.uid == request.resource.data.clientPhone);
-      allow update, delete: if isAdmin() || (isUser() && resource.data.clientPhone == request.auth.uid);
+      
+      // User can create only pending appointments for their own authenticated phone
+      allow create: if isAdmin() || (
+        isUser() &&
+        request.auth.uid == request.resource.data.clientPhone &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.clientPhone is string &&
+        request.resource.data.fullDate is string &&
+        request.resource.data.time is string
+      );
+
+      // User can only cancel or confirm arrival; cannot change dates, treatments, or approve themselves
+      allow update: if isAdmin() || (
+        isUser() &&
+        resource.data.clientPhone == request.auth.uid &&
+        request.resource.data.clientPhone == resource.data.clientPhone &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'statusText', 'clientConfirmed']) &&
+        (request.resource.data.status == resource.data.status || request.resource.data.status == 'canceled')
+      );
+
+      // Deleting appointments: Admin only
+      allow delete: if isAdmin();
     }
-    
+
+    // ===============================================================
+    // Busy Slots (Sanitized public booking slots without client PII)
+    // ===============================================================
     match /busy_slots/{docId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if false; // Managed exclusively by Cloud Function triggers
     }
-    match /otps/{docId} { allow read, write: if false; }
+
+    // ===============================================================
+    // OTPs (SMS verification codes)
+    // ===============================================================
+    match /otps/{docId} {
+      allow read, write: if false; // Server-side Firebase Admin SDK only
+    }
+
+    // ===============================================================
+    // Notifications (Admin alerts)
+    // ===============================================================
     match /notifications/{docId} {
-      allow create: if isUser() || isAdmin();
+      allow create: if (isUser() || isAdmin()) &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() <= 300;
       allow read, update, delete: if isAdmin();
     }
   }
