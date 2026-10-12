@@ -25,6 +25,26 @@ function normalizePhone(raw) {
 }
 window.normalizePhone = normalizePhone;
 
+// פונקציות לטיפול בתאריכים מקומיים ומניעת תזוזת אזורי זמן (Timezone Bugs)
+function getLocalDateString(dateInput = new Date()) {
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+        return dateInput;
+    }
+    const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+window.getLocalDateString = getLocalDateString;
+
+function parseLocalDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return new Date();
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+}
+window.parseLocalDate = parseLocalDate;
+
 let currentUserPhone = null;
 let currentUserName = null;
 let myAppsUnsubscribe = null;
@@ -394,7 +414,7 @@ function renderMyAppointments() {
   if(!listContainer || !statsContainer) return; listContainer.innerHTML = ''; 
   const myOwnAppointments = JSON.parse(localStorage.getItem('myAppointments')) || []; 
 
-  let arrived = 0, cancelMe = 0, cancelNatali = 0; const todayStr = new Date().toISOString().split('T')[0];
+  let arrived = 0, cancelMe = 0, cancelNatali = 0; const todayStr = getLocalDateString();
   myOwnAppointments.forEach(app => {
       if(app.status === 'approved' && app.fullDate < todayStr) arrived++;
       if(app.status === 'canceled') { if(app.cancelSource === 'client' || (app.statusText && app.statusText.includes('ידך'))) cancelMe++; else cancelNatali++; }
@@ -470,11 +490,15 @@ function timeToMinutes(timeStr) { let [h, m] = (timeStr||"00:00").split(':').map
 
 function renderBookingDays() {
     const daysList = document.getElementById('dynamicDaysList'); daysList.innerHTML = '';
-    let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; const todayStr = new Date().toISOString().split('T')[0]; adminShifts = adminShifts.filter(s => s && s.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date));
+    let adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || []; const todayStr = getLocalDateString(); adminShifts = adminShifts.filter(s => s && s.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date));
     if(adminShifts.length === 0) { daysList.innerHTML = '<p style="color:#777; width:100%; text-align:center;">נטלי עדיין לא פתחה יומן לתקופה הקרובה. חזרי להתעדכן בקרוב! 🤍</p>'; return; }
     const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
     adminShifts.forEach((shift) => {
-        let d = new Date(shift.date); let dayName = dayNames[d.getDay()]; let dateFormatted = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;
+        if (!shift || !shift.date) return;
+        const [sYear, sMonth, sDay] = shift.date.split('-').map(Number);
+        const d = new Date(sYear, (sMonth || 1) - 1, sDay || 1);
+        let dayName = dayNames[d.getDay()];
+        let dateFormatted = `${String(sDay).padStart(2,'0')}.${String(sMonth).padStart(2,'0')}`;
         let div = document.createElement('div'); div.className = 'day-card'; div.innerHTML = `${dayName}<br><strong>${dateFormatted}</strong>`; div.setAttribute('data-fulldate', shift.date); div.setAttribute('data-display', dateFormatted);
         div.onclick = () => { document.querySelectorAll('.day-card').forEach(el => el.classList.remove('selected')); div.classList.add('selected'); document.getElementById('timeWrapper').style.display = 'block'; renderBookingTimes(shift, dateFormatted); };
         daysList.appendChild(div);
@@ -514,7 +538,7 @@ function renderBookingTimes(shift, dateFormatted) {
     let treatmentDuration = window.selectedTreatmentDuration || 60;
     
     const now = new Date();
-    const localTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const localTodayStr = getLocalDateString(now);
     const isToday = (shift.date === localTodayStr);
     const currentMinutesWithBuffer = (now.getHours() * 60) + now.getMinutes() + 30;
 

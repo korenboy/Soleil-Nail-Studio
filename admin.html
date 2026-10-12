@@ -536,6 +536,36 @@
     }
     window.escICS = escICS;
 
+    // פונקציות לטיפול בתאריכים מקומיים ומניעת תזוזת אזורי זמן (Timezone Bugs)
+    function getLocalDateString(dateInput = new Date()) {
+        if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+            return dateInput;
+        }
+        const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    window.getLocalDateString = getLocalDateString;
+
+    function parseLocalDate(dateStr) {
+        if (!dateStr || typeof dateStr !== 'string') return new Date();
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, (m || 1) - 1, d || 1);
+    }
+    window.parseLocalDate = parseLocalDate;
+
+    // ניקוי מספר טלפון לקישורי WhatsApp בינלאומיים חסינים
+    function formatPhoneForWhatsApp(phone) {
+        if (!phone) return '';
+        let cleaned = String(phone).replace(/\D/g, '');
+        if (cleaned.startsWith('972')) cleaned = cleaned.substring(3);
+        if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
+        return cleaned;
+    }
+    window.formatPhoneForWhatsApp = formatPhoneForWhatsApp;
+
     // 🔥 בדיקת אבטחה אמיתית מול השרת דרך טוקן! 🔥
     auth.onAuthStateChanged(async (user) => {
         if (user) {
@@ -544,7 +574,7 @@
                 if (idTokenResult.claims.admin === true) {
                     document.getElementById('adminAuthScreen').style.display = 'none';
                     document.getElementById('adminAppWrapper').style.display = 'flex';
-                    const currentMonthStr = new Date().toISOString().substring(0, 7);
+                    const currentMonthStr = getLocalDateString().substring(0, 7);
                     if(document.getElementById('finMonthSelect')) document.getElementById('finMonthSelect').value = currentMonthStr;
                     
                     initAdminListeners();
@@ -556,16 +586,26 @@
                     
                     if (action === 'approve_app') {
                         const appId = urlParams.get('id');
-                        db.collection("appointments").doc(appId.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}).then(() => {
-                            alert("התור אושר בהצלחה מטלגרם! ✅");
-                            window.history.replaceState(null, null, window.location.pathname);
-                        });
+                        if (appId) {
+                            db.collection("appointments").doc(appId.toString()).update({status: 'approved', statusText: 'מאושר ✔️', reminderSmsSent: false}).then(() => {
+                                alert("התור אושר בהצלחה מטלגרם! ✅");
+                                window.history.replaceState(null, null, window.location.pathname);
+                            }).catch(err => {
+                                console.error(err);
+                                alert("שגיאה באישור התור: " + err.message);
+                            });
+                        }
                     } else if (action === 'approve_user') {
                         const phone = urlParams.get('phone');
-                        db.collection("users").doc(phone).update({ status: 'approved' }).then(() => {
-                            alert("הלקוחה אושרה בהצלחה מטלגרם! ✅");
-                            window.history.replaceState(null, null, window.location.pathname);
-                        });
+                        if (phone) {
+                            db.collection("users").doc(phone).update({ status: 'approved' }).then(() => {
+                                alert("הלקוחה אושרה בהצלחה מטלגרם! ✅");
+                                window.history.replaceState(null, null, window.location.pathname);
+                            }).catch(err => {
+                                console.error(err);
+                                alert("שגיאה באישור הלקוחה: " + err.message);
+                            });
+                        }
                     }
                 } else {
                     alert("שגיאת הרשאות: אין לך תג מנהלת!");
@@ -822,7 +862,7 @@ window.closeManualBookModal = function() {
         document.getElementById('adminGreetingMsg').innerText = `${greeting}, נטלי! 🤍`;
         
         let totalArrived = 0, totalCancelClient = 0, totalCancelAdmin = 0; 
-        const todayStr = new Date().toISOString().split('T')[0]; 
+        const todayStr = getLocalDateString(); 
         const currentMonthStr = todayStr.substring(0, 7); 
         let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
         
@@ -1000,7 +1040,12 @@ window.closeManualBookModal = function() {
 
     window.deleteTreatment = function(id) {
         if(confirm("האם למחוק טיפול זה? הוא לא יופיע יותר ללקוחות.")) {
-            db.collection('treatments').doc(id).delete();
+            db.collection('treatments').doc(id).delete()
+            .then(() => alert("הטיפול נמחק בהצלחה!"))
+            .catch(err => {
+                console.error(err);
+                alert("שגיאה במחיקת הטיפול: " + err.message);
+            });
         }
     };
 
@@ -1051,6 +1096,9 @@ window.closeManualBookModal = function() {
         }).then(() => {
             document.getElementById('editAppModal').classList.remove('active');
             alert("התור עודכן בהצלחה! משך הטיפול החדש הוא " + duration + " דקות.");
+        }).catch(err => {
+            console.error(err);
+            alert("שגיאה בעדכון התור: " + err.message);
         });
     };
 
@@ -1070,13 +1118,19 @@ window.closeManualBookModal = function() {
             if (user.status === 'pending') pendingList.innerHTML += html; else if (user.status === 'approved') approvedList.innerHTML += html; else blockedList.innerHTML += html;
         });
     }
-    window.changeUserStatus = function(phone, status) { db.collection("users").doc(phone).update({ status: status }); }
+    window.changeUserStatus = function(phone, status) {
+        db.collection("users").doc(phone).update({ status: status })
+        .catch(err => {
+            console.error(err);
+            alert("שגיאה בעדכון סטטוס הלקוחה: " + err.message);
+        });
+    };
 
     function loadAppointmentsData() {
         let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
         const pendingList = document.getElementById('adminPendingAppsList'); const approvedList = document.getElementById('adminApprovedAppsList'); const pastList = document.getElementById('adminPastAppsList');
         if(!pendingList) return; pendingList.innerHTML = ''; approvedList.innerHTML = ''; pastList.innerHTML = ''; 
-        const now = new Date(); const todayStr = now.toISOString().split('T')[0]; const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const now = new Date(); const todayStr = getLocalDateString(now); const currentMinutes = now.getHours() * 60 + now.getMinutes();
         
         allApps.slice().reverse().forEach(app => {
             if(!app) return; let isPast = false; if(app.fullDate && app.fullDate < todayStr) isPast = true; else if (app.fullDate === todayStr) { const [h, m] = (app.time || "00:00").split(':').map(Number); if ((h * 60 + m) < currentMinutes) isPast = true; }
@@ -1125,7 +1179,7 @@ window.closeManualBookModal = function() {
     
     // מיון לפי תאריכים
     waitlist.sort((a,b) => a.fullDate.localeCompare(b.fullDate));
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
     waitlist = waitlist.filter(w => w.fullDate >= todayStr); 
     
     list.innerHTML = '';
@@ -1136,7 +1190,7 @@ window.closeManualBookModal = function() {
     
     waitlist.forEach(w => {
         let prefs = w.preferences ? w.preferences.join(', ') : 'כל היום';
-        const cleanP = (w.clientPhone || '').replace(/^0/, '');
+        const cleanP = formatPhoneForWhatsApp(w.clientPhone);
         const waText = encodeURIComponent(`היי ${w.clientName || ''}, התפנה לי תור בקליניקה ב-${w.date || ''}! האם תרצי שאקבע לך?`);
         const waUrl = `https://wa.me/972${cleanP}?text=${waText}`;
         const safeWId = esc(w.id || '');
@@ -1177,12 +1231,16 @@ window.removeFromWaitlist = function(id) {
         if(!confirm(`לשלוח תזכורת SMS ל-${app.clientName}?`)) return;
         try {
             const sendReminderSms = functions.httpsCallable('sendReminderSms');
-            await sendReminderSms({ phone: app.clientPhone, clientName: app.clientName, date: app.date, time: app.time, id: app.id });
-            db.collection("appointments").doc(id.toString()).update({reminderSmsSent: true});
+            const res = await sendReminderSms({ phone: app.clientPhone, clientName: app.clientName, date: app.date, time: app.time, id: app.id });
+            if (res && res.data && res.data.success === false) {
+                alert("❌ שגיאה בשליחת תזכורת: " + (res.data.error || "הפעולה נכשלה."));
+                return;
+            }
+            await db.collection("appointments").doc(id.toString()).update({reminderSmsSent: true});
             alert("תזכורת SMS נשלחה בהצלחה ללקוחה.");
             loadAppointmentsData();
         } catch(e) {
-            console.error(e); alert("❌ שגיאה בשליחה, ודאי שהמערכת מחוברת."); 
+            console.error(e); alert("❌ שגיאה בשליחה: " + (e.message || "ודאי שהמערכת מחוברת.")); 
         }
     };
 
@@ -1427,19 +1485,18 @@ window.saveShift = async function() {
     const btn = document.querySelector('#shiftModal .btn-submit');
     if(btn) { btn.innerText = 'שומר...'; btn.disabled = true; }
 
-    let datesToSave = [new Date(date)];
+    let datesToSave = [date];
     if (isRecurring) {
+        const [y, m, day] = date.split('-').map(Number);
         for(let i = 1; i <= 12; i++) {
-            let nextDate = new Date(date);
-            nextDate.setDate(nextDate.getDate() + (i * 7));
-            datesToSave.push(nextDate);
+            let nextDate = new Date(y, m - 1, day + (i * 7));
+            datesToSave.push(getLocalDateString(nextDate));
         }
     }
 
     try {
         let batch = db.batch();
-        datesToSave.forEach(d => {
-            let dateStr = d.toISOString().split('T')[0];
+        datesToSave.forEach(dateStr => {
             let shiftRef = db.collection('shifts').doc(dateStr);
             batch.set(shiftRef, {
                 date: dateStr, start: start, end: end, breakStart: bStart, breakEnd: bEnd, isClosed: isClosed
@@ -1451,11 +1508,25 @@ window.saveShift = async function() {
         document.getElementById('shiftClosed').checked = false;
         renderCalendar();
     } catch(e) { 
-        console.error(e); alert('שגיאה בשמירת המשמרת.'); 
+        console.error(e); alert('שגיאה בשמירת המשמרת: ' + (e.message || '')); 
     } finally { 
         if(btn) { btn.innerText = 'שמירה'; btn.disabled = false; } 
     }
-};    window.deleteShift = function() { const date = document.getElementById('shiftModalDate').value; db.collection("shifts").doc(date).delete().then(() => { document.getElementById('shiftModal').classList.remove('active'); renderCalendar(); }); }
+};
+
+    window.deleteShift = function() {
+        const date = document.getElementById('shiftModalDate').value;
+        if (!date) return;
+        if (!confirm("האם את בטוחה שברצונך למחוק את המשמרת לתאריך זה?")) return;
+        db.collection("shifts").doc(date).delete().then(() => {
+            document.getElementById('shiftModal').classList.remove('active');
+            renderCalendar();
+            alert("המשמרת נמחקה בהצלחה.");
+        }).catch(err => {
+            console.error(err);
+            alert("שגיאה במחיקת המשמרת: " + err.message);
+        });
+    };
     
     window.loadTodaySchedule = function() {
         const scheduleList = document.getElementById('todayScheduleList');
@@ -1578,7 +1649,7 @@ window.saveShift = async function() {
     // ==========================================
     window.exportAdminCalendar = function() {
         let allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getLocalDateString();
         
         let futureApps = allApps.filter(app => app && app.status === 'approved' && app.fullDate >= todayStr);
 
@@ -1648,7 +1719,7 @@ window.saveShift = async function() {
 
         const dateSelect = document.getElementById('manualDateSelect');
         const adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || [];
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getLocalDateString();
         const upcomingShifts = adminShifts.filter(s => s && s.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date));
         
         dateSelect.innerHTML = '<option value="">בחרי תאריך...</option>';
@@ -1771,7 +1842,9 @@ window.saveShift = async function() {
             const rawClientPhone = document.getElementById('newClientPhone').value.trim();
             if (!clientName || !rawClientPhone) { alert("מלאי פרטי לקוחה חדשה"); return; }
             clientPhone = window.cleanPhoneNumber ? window.cleanPhoneNumber(rawClientPhone) : rawClientPhone;
-            db.collection("users").doc(clientPhone).set({ name: clientName, phone: clientPhone, status: 'approved' });
+            db.collection("users").doc(clientPhone).set({ name: clientName, phone: clientPhone, status: 'approved' }).catch(err => {
+                console.error("Error creating user for manual appt:", err);
+            });
         } else if (selectedManualClient) {
             clientName = selectedManualClient.name;
             clientPhone = selectedManualClient.phone;
@@ -1793,6 +1866,9 @@ window.saveShift = async function() {
         }).then(() => {
             alert("התור נקבע בהצלחה!");
             closeManualBookModal();
+        }).catch(err => {
+            console.error(err);
+            alert("שגיאה בקביעת התור: " + err.message);
         });
     };
 
@@ -2069,7 +2145,7 @@ window.saveShift = async function() {
         
         clientApps.sort((a, b) => (b.fullDate || '').localeCompare(a.fullDate || ''));
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getLocalDateString();
         let attended = 0;
         let canceled = 0;
 
@@ -2088,7 +2164,7 @@ window.saveShift = async function() {
 
         if (nameEl) nameEl.textContent = user.name || 'לקוחה';
         
-        const cleanP = (phone || '').replace(/^0/, '');
+        const cleanP = formatPhoneForWhatsApp(phone);
         if (phoneEl) {
             phoneEl.innerHTML = `
                 <span>${esc(phone)}</span>
@@ -2146,17 +2222,15 @@ window.saveShift = async function() {
         const allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
         
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = getLocalDateString(now);
         const currentMonthStr = todayStr.substring(0, 7);
         const currentYearStr = todayStr.substring(0, 4);
 
         const dayOfWeek = now.getDay();
-        const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - dayOfWeek);
-        const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
-        const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+        const startOfWeekStr = getLocalDateString(startOfWeek);
+        const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 6);
+        const endOfWeekStr = getLocalDateString(endOfWeek);
 
         let arrived = 0;
         let cancelClient = 0;
@@ -2206,7 +2280,7 @@ window.saveShift = async function() {
             } else {
                 let html = '';
                 approvedUsers.forEach(u => {
-                    let cleanPhone = (u.phone || '').replace(/^0/, '');
+                    let cleanPhone = formatPhoneForWhatsApp(u.phone);
                     let waUrl = `https://wa.me/972${cleanPhone}` + (encodedMsg ? `?text=${encodedMsg}` : '');
                     html += `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee;">
