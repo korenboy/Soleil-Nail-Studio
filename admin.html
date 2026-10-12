@@ -279,9 +279,10 @@
                 <div style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #eee; margin-bottom:15px; border-right: 4px solid #dc3545;">
     <h3 style="margin-top: 0; font-size:16px; color:#dc3545;">ניהול גישה (מספר מנהלת) 🔒</h3>
     <p style="font-size: 13px; color: #777;">החלפת מספר הטלפון המורשה להיכנס למערכת הניהול.</p>
+    <p style="font-size: 13px; color: #333; margin-bottom: 10px;"><strong>מספר נוכחי במערכת:</strong> <span id="currentAdminPhoneDisplay" style="font-weight: bold; color: #111;">טוען...</span></p>
     <div style="display:flex; gap:10px;">
         <input type="tel" id="newAdminPhoneInput" class="form-input" placeholder="מספר טלפון חדש..." style="margin-bottom:0;">
-        <button class="btn-submit" style="background:#dc3545; color:white; width:auto; padding:0 20px; margin-bottom:0;" onclick="changeAdminPhone()">שנה מספר</button>
+        <button class="btn-submit" id="changeAdminPhoneBtn" style="background:#dc3545; color:white; width:auto; padding:0 20px; margin-bottom:0;" onclick="changeAdminPhone()">שנה מספר</button>
     </div>
 </div>
 
@@ -470,6 +471,18 @@
 
         <button class="btn-submit" onclick="generateWeeklyShifts()">פתיחת יומן 🚀</button>
         <button style="background:none; border:none; width:100%; color:#777; padding:10px;" onclick="document.getElementById('weeklyTemplateModal').classList.remove('active')">ביטול</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="changeAdminPhoneModal">
+    <div class="modal-content" style="height: auto; padding: 25px; border-radius: 20px; max-width: 360px; text-align: center;">
+        <h2 style="margin-top: 0; font-size: 18px; color: #dc3545;">אימות החלפת מספר מנהלת 🔒</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
+            שלחנו קוד אימות ב-SMS ל:<br><strong id="pendingChangePhoneDisplay" style="color:#111; font-size:15px;"></strong>
+        </p>
+        <input type="tel" id="changeAdminOtpInput" class="form-input" placeholder="הקלידי 6 ספרות..." maxlength="6" style="text-align: center; font-size: 20px; letter-spacing: 5px; font-weight: bold; margin-bottom: 15px;">
+        <button class="btn-submit" id="confirmChangeAdminPhoneBtn" style="background: #28a745; color: white; margin-bottom: 5px;" onclick="confirmChangeAdminPhone()">אימות ועדכון מספר 🚀</button>
+        <button style="background: none; border: none; width: 100%; color: #777; padding: 10px; cursor: pointer;" onclick="closeChangeAdminPhoneModal()">ביטול</button>
     </div>
 </div>
 
@@ -826,6 +839,7 @@ window.closeManualBookModal = function() {
                 });
             }
         });
+        if(typeof loadCurrentAdminPhone === 'function') loadCurrentAdminPhone();
     };
 
     // ==========================================
@@ -1749,6 +1763,132 @@ window.saveShift = async function() {
         }
         
         return cleaned;
+    };
+
+    // === טעינת מספר מנהלת נוכחי במערכת ===
+    window.loadCurrentAdminPhone = function() {
+        db.collection('settings').doc('adminConfig').get().then(doc => {
+            const el = document.getElementById('currentAdminPhoneDisplay');
+            if (el) {
+                if (doc.exists && doc.data().adminPhone) {
+                    el.innerText = doc.data().adminPhone;
+                } else {
+                    el.innerText = "לא הוגדר (ברירת מחדל)";
+                }
+            }
+        }).catch(err => {
+            console.error("Error loading admin phone:", err);
+        });
+    };
+
+    // === שינוי מספר טלפון של המנהלת עם אימות SMS מלא ===
+    let pendingNewAdminPhone = null;
+
+    window.changeAdminPhone = async function() {
+        const input = document.getElementById('newAdminPhoneInput');
+        let newPhone = input ? input.value.trim() : '';
+        if (!newPhone || newPhone.length < 9) {
+            alert("נא להזין מספר טלפון תקין (לפחות 9 ספרות)");
+            return;
+        }
+
+        let cleanPhone = window.cleanPhoneNumber(newPhone);
+        if (!cleanPhone || cleanPhone.length < 9) {
+            alert("מספר הטלפון שהוזן אינו תקין");
+            return;
+        }
+
+        if (!confirm(`האם לשלוח קוד אימות ב-SMS למספר החדש (${cleanPhone})?`)) {
+            return;
+        }
+
+        const btn = document.getElementById('changeAdminPhoneBtn');
+        const originalText = btn ? btn.innerText : "שנה מספר";
+        if (btn) {
+            btn.innerText = "שולח SMS...";
+            btn.disabled = true;
+        }
+
+        try {
+            const sendOtpSms = functions.httpsCallable('sendOtpSms');
+            const res = await sendOtpSms({ phone: cleanPhone });
+
+            if (res.data && res.data.success) {
+                pendingNewAdminPhone = cleanPhone;
+                const displayEl = document.getElementById('pendingChangePhoneDisplay');
+                if (displayEl) displayEl.innerText = cleanPhone;
+                const otpInput = document.getElementById('changeAdminOtpInput');
+                if (otpInput) otpInput.value = '';
+                
+                const modal = document.getElementById('changeAdminPhoneModal');
+                if (modal) modal.classList.add('active');
+                
+                setTimeout(() => {
+                    if (otpInput) otpInput.focus();
+                }, 300);
+            } else {
+                alert("❌ " + (res.data?.error || "שגיאה בשליחת קוד אימות ב-SMS"));
+            }
+        } catch (e) {
+            console.error("Error sending OTP for admin phone change:", e);
+            alert("❌ שגיאה בתקשורת מול השרת: " + (e.message || e));
+        } finally {
+            if (btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+    };
+
+    window.closeChangeAdminPhoneModal = function() {
+        const modal = document.getElementById('changeAdminPhoneModal');
+        if (modal) modal.classList.remove('active');
+        pendingNewAdminPhone = null;
+    };
+
+    window.confirmChangeAdminPhone = async function() {
+        if (!pendingNewAdminPhone) {
+            alert("שגיאה: חסר מספר יעד. אנא התחילי מחדש.");
+            window.closeChangeAdminPhoneModal();
+            return;
+        }
+
+        const otpInput = document.getElementById('changeAdminOtpInput');
+        const code = otpInput ? otpInput.value.trim() : '';
+        if (!code || code.length < 6) {
+            alert("נא להזין את כל 6 הספרות של קוד האימות");
+            return;
+        }
+
+        const btn = document.getElementById('confirmChangeAdminPhoneBtn');
+        const originalText = btn ? btn.innerText : "אימות ועדכון מספר 🚀";
+        if (btn) {
+            btn.innerText = "מאמת ומעדכן...";
+            btn.disabled = true;
+        }
+
+        try {
+            const verifyAndChange = functions.httpsCallable('verifyAndChangeAdminPhone');
+            const res = await verifyAndChange({ newPhone: pendingNewAdminPhone, code: code });
+
+            if (res.data && res.data.success) {
+                alert(`✅ מספר המנהלת עודכן בהצלחה ל: ${res.data.newPhone}!\nמעכשיו רק מספר זה מורשה להיכנס למערכת הניהול.`);
+                const input = document.getElementById('newAdminPhoneInput');
+                if (input) input.value = '';
+                window.closeChangeAdminPhoneModal();
+                window.loadCurrentAdminPhone();
+            } else {
+                alert("❌ " + (res.data?.error || "קוד אימות שגוי"));
+            }
+        } catch (e) {
+            console.error("Error confirming admin phone change:", e);
+            alert("❌ שגיאה בעדכון המספר מול השרת: " + (e.message || e));
+        } finally {
+            if (btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
     };
 </script>
 </body>

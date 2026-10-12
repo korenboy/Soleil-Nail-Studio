@@ -186,6 +186,67 @@ const { onCall } = require('firebase-functions/v2/https');
         return { success: true };
     });
 
+    // 🌟 שינוי מספר מנהלת מאובטח עם אימות SMS מלא - מוגן בטוקן Admin 🌟
+    exports.verifyAndChangeAdminPhone = onCall({ cors: true }, async (request) => {
+        try {
+            if (!request.auth || request.auth.token.admin !== true) {
+                return { success: false, error: "אין הרשאה. פעולה זו מותרת למנהלת מחוברת בלבד." };
+            }
+
+            const { newPhone, code } = request.data;
+            if (!newPhone || !code) {
+                return { success: false, error: "חסר מספר טלפון או קוד אימות." };
+            }
+
+            let cleanPhone = String(newPhone).replace(/[\s\-+]/g, '');
+            if (cleanPhone.startsWith('972')) cleanPhone = '0' + cleanPhone.substring(3);
+
+            if (cleanPhone.length < 9) {
+                return { success: false, error: "מספר טלפון לא תקין." };
+            }
+
+            const otpRef = db.collection('otps').doc(cleanPhone);
+            let otpDoc = await otpRef.get();
+            if (!otpDoc.exists) {
+                const rawDoc = await db.collection('otps').doc(String(newPhone).trim()).get();
+                if (rawDoc.exists) otpDoc = rawDoc;
+            }
+
+            if (!otpDoc.exists) {
+                return { success: false, error: "לא נמצא קוד אימות פעיל למספר זה. שלחי קוד שוב." };
+            }
+
+            const otpData = otpDoc.data();
+
+            if (Date.now() - (otpData.timestamp?.toMillis() || 0) > 5 * 60 * 1000) {
+                return { success: false, error: "הקוד פג תוקף. שלחי קוד חדש." };
+            }
+
+            if ((otpData.attempts || 0) >= 5) {
+                return { success: false, error: "יותר מדי ניסיונות שגויים. שלחי קוד חדש." };
+            }
+
+            if (String(otpData.code).trim() !== String(code).trim()) {
+                await otpDoc.ref.update({ attempts: admin.firestore.FieldValue.increment(1) });
+                return { success: false, error: "קוד אימות שגוי. נסי שוב." };
+            }
+
+            await otpDoc.ref.delete();
+
+            await db.collection('settings').doc('adminConfig').set({
+                adminPhone: cleanPhone,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedBy: request.auth.uid
+            }, { merge: true });
+
+            console.log(`Admin phone successfully updated to: ${cleanPhone}`);
+            return { success: true, newPhone: cleanPhone };
+        } catch (error) {
+            console.error("ERROR IN VERIFYANDCHANGEADMINPHONE:", error);
+            return { success: false, error: error.message };
+        }
+    });
+
     exports.onNewAppointment = onDocumentCreated('appointments/{appId}', async (event) => {
         const app = event.data.data();
         const appId = event.params.appId;
