@@ -1765,6 +1765,14 @@ window.saveShift = async function() {
         return cleaned;
     };
 
+    window.normalizePhone = function(raw) {
+        if (typeof raw !== 'string') return null;
+        let p = raw.replace(/[\s\-()]/g, '');
+        if (p.startsWith('+972')) p = '0' + p.slice(4);
+        else if (p.startsWith('972')) p = '0' + p.slice(3);
+        return /^05\d{8}$/.test(p) ? p : null;
+    };
+
     // === טעינת מספר מנהלת נוכחי במערכת ===
     window.loadCurrentAdminPhone = function() {
         db.collection('settings').doc('adminConfig').get().then(doc => {
@@ -1787,14 +1795,14 @@ window.saveShift = async function() {
     window.changeAdminPhone = async function() {
         const input = document.getElementById('newAdminPhoneInput');
         let newPhone = input ? input.value.trim() : '';
-        if (!newPhone || newPhone.length < 9) {
-            alert("נא להזין מספר טלפון תקין (לפחות 9 ספרות)");
+        if (!newPhone) {
+            alert("נא להזין מספר טלפון");
             return;
         }
 
-        let cleanPhone = window.cleanPhoneNumber(newPhone);
-        if (!cleanPhone || cleanPhone.length < 9) {
-            alert("מספר הטלפון שהוזן אינו תקין");
+        let cleanPhone = window.normalizePhone(newPhone);
+        if (!cleanPhone) {
+            alert("מספר הטלפון שהוזן אינו תקין. יש להזין מספר נייד ישראלי תקני (לדוגמה: 0501234567)");
             return;
         }
 

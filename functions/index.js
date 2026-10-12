@@ -15,6 +15,14 @@ const { onCall } = require('firebase-functions/v2/https');
     const { onDocumentWritten } = require('firebase-functions/v2/firestore');
     const { google } = require('googleapis');
 
+    function normalizePhone(raw) {
+        if (typeof raw !== 'string') return null;
+        let p = raw.replace(/[\s\-()]/g, '');
+        if (p.startsWith('+972')) p = '0' + p.slice(4);
+        else if (p.startsWith('972')) p = '0' + p.slice(3);
+        return /^05\d{8}$/.test(p) ? p : null;
+    }
+
     async function sendTelegramMessage(text) {
         if (!TELEGRAM_BOT_TOKEN) return;
         try {
@@ -198,11 +206,9 @@ const { onCall } = require('firebase-functions/v2/https');
                 return { success: false, error: "חסר מספר טלפון או קוד אימות." };
             }
 
-            let cleanPhone = String(newPhone).replace(/[\s\-+]/g, '');
-            if (cleanPhone.startsWith('972')) cleanPhone = '0' + cleanPhone.substring(3);
-
-            if (cleanPhone.length < 9) {
-                return { success: false, error: "מספר טלפון לא תקין." };
+            const cleanPhone = normalizePhone(String(newPhone));
+            if (!cleanPhone) {
+                return { success: false, error: "מספר טלפון לא תקין. יש להזין מספר נייד ישראלי תקין בן 10 ספרות (לדוגמה: 0501234567)." };
             }
 
             const otpRef = db.collection('otps').doc(cleanPhone);
