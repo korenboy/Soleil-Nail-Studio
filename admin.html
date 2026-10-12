@@ -1061,6 +1061,7 @@ window.closeManualBookModal = function() {
                 else approvedList.innerHTML += html + `<div style="display:flex; gap:5px; align-items:center;"><button class="btn-sms" onclick="sendManualSmsReminder('${app.id}')">תזכורת SMS</button><button class="btn-edit" onclick="openEditAppModal('${app.id}')">✏️</button><button class="btn-block" onclick="cancelApp('${app.id}')">ביטול</button></div></div>`;
             }
         });
+        if (typeof window.loadAppointmentsStats === 'function') window.loadAppointmentsStats();
     }
 
     // 🔥 התיקון: הוספת .then() ו- .catch() לכפתורי אישור וביטול תור
@@ -1740,6 +1741,436 @@ window.saveShift = async function() {
             alert("התור נקבע בהצלחה!");
             closeManualBookModal();
         });
+    };
+
+    // ==========================================
+    // התראות - טיפול בלחיצה ומחיקה
+    // ==========================================
+    window.handleNotifClick = function(id, targetScreen) {
+        if (window.event) window.event.stopPropagation();
+        
+        db.collection('notifications').doc(id).update({ read: true }).catch(err => {
+            console.error("Error updating notification:", err);
+        });
+        
+        const notifDropdown = document.getElementById('notifDropdown');
+        if (notifDropdown) notifDropdown.classList.remove('active');
+        
+        let targetId = '';
+        if (targetScreen === 'users') {
+            targetId = 'clientsScreen';
+        } else if (targetScreen === 'appointments') {
+            targetId = 'appointmentsScreen';
+        }
+
+        if (targetId) {
+            document.querySelectorAll('.admin-screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) targetEl.classList.add('active');
+            
+            const targetNavItem = document.querySelector(`.nav-item[data-target="${targetId}"]`);
+            if (targetNavItem) targetNavItem.classList.add('active');
+
+            if (targetId === 'clientsScreen') renderUsers();
+            if (targetId === 'appointmentsScreen') { loadAppointmentsData(); renderWaitlistAdmin(); }
+        }
+    };
+
+    window.deleteNotif = function(id) {
+        if (window.event) window.event.stopPropagation();
+        if (confirm('למחוק את ההתראה?')) {
+            db.collection('notifications').doc(id).delete().catch(err => {
+                console.error("Error deleting notification:", err);
+            });
+        }
+    };
+
+    // ==========================================
+    // ניהול פיננסי (הכנסות / הוצאות)
+    // ==========================================
+    window.saveFinanceRecord = function() {
+        const typeEl = document.getElementById('finType');
+        const amountEl = document.getElementById('finAmount');
+        const descEl = document.getElementById('finDesc');
+        const dateEl = document.getElementById('finDate');
+
+        const type = typeEl ? typeEl.value : 'income';
+        const amount = amountEl ? amountEl.value.trim() : '';
+        const desc = descEl ? descEl.value.trim() : '';
+        const date = dateEl ? dateEl.value : '';
+        
+        const formTitle = document.getElementById('finFormTitle');
+        const editId = formTitle ? formTitle.getAttribute('data-edit-id') : null;
+        
+        if (!amount || !desc || !date) { alert("יש למלא את כל השדות!"); return; }
+        
+        const btn = document.getElementById('finSaveBtn');
+        if (btn) { btn.innerText = 'שומר...'; btn.disabled = true; }
+
+        const recordId = editId ? editId : Date.now().toString();
+        const monthStr = date.substring(0, 7);
+        
+        db.collection('finance').doc(recordId).set({
+            id: recordId, 
+            type: type, 
+            amount: parseInt(amount, 10), 
+            desc: desc, 
+            date: date, 
+            month: monthStr, 
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).then(() => {
+            alert(editId ? "התנועה עודכנה בהצלחה! 💰" : "תנועה נשמרה בהצלחה! 💰");
+            cancelFinanceEdit();
+            loadFinanceData();
+        }).catch(err => {
+            console.error("Error saving finance record:", err);
+            alert("שגיאה בשמירה!");
+        }).finally(() => {
+            if (btn) btn.disabled = false;
+        });
+    };
+
+    window.editFinanceRecord = function(id) {
+        db.collection('finance').doc(id).get().then(doc => {
+            if (doc.exists) {
+                const r = doc.data();
+                const finType = document.getElementById('finType');
+                const finAmount = document.getElementById('finAmount');
+                const finDesc = document.getElementById('finDesc');
+                const finDate = document.getElementById('finDate');
+                const formTitle = document.getElementById('finFormTitle');
+                const saveBtn = document.getElementById('finSaveBtn');
+                const cancelBtn = document.getElementById('finCancelEditBtn');
+
+                if (finType) finType.value = r.type || 'income';
+                if (finAmount) finAmount.value = r.amount || '';
+                if (finDesc) finDesc.value = r.desc || '';
+                if (finDate) finDate.value = r.date || '';
+                
+                if (formTitle) {
+                    formTitle.innerText = 'עריכת תנועה ✏️';
+                    formTitle.setAttribute('data-edit-id', id);
+                }
+                if (saveBtn) saveBtn.innerText = 'שמור שינויים';
+                if (cancelBtn) cancelBtn.style.display = 'block';
+                
+                const screen = document.getElementById('financeScreen');
+                if (screen) screen.scrollTop = 0;
+            }
+        }).catch(err => {
+            console.error("Error fetching finance record:", err);
+        });
+    };
+
+    window.cancelFinanceEdit = function() {
+        const formTitle = document.getElementById('finFormTitle');
+        const finType = document.getElementById('finType');
+        const finAmount = document.getElementById('finAmount');
+        const finDesc = document.getElementById('finDesc');
+        const finDate = document.getElementById('finDate');
+        const saveBtn = document.getElementById('finSaveBtn');
+        const cancelBtn = document.getElementById('finCancelEditBtn');
+
+        if (formTitle) {
+            formTitle.innerText = 'הוספת תנועה';
+            formTitle.removeAttribute('data-edit-id');
+        }
+        if (finType) finType.value = 'income';
+        if (finAmount) finAmount.value = '';
+        if (finDesc) finDesc.value = '';
+        if (finDate) finDate.value = '';
+        if (saveBtn) saveBtn.innerText = 'שמירה';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+    };
+
+    window.loadFinanceData = function() {
+        const monthSelect = document.getElementById('finMonthSelect');
+        if (!monthSelect) return;
+        if (!monthSelect.value) {
+            const now = new Date();
+            monthSelect.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+        const month = monthSelect.value;
+        if (!month) return;
+        
+        const list = document.getElementById('finHistoryList');
+        if (!list) return;
+        list.innerHTML = 'טוען...';
+        
+        db.collection('finance').where('month', '==', month).get().then(snap => {
+            let totalIncome = 0; let totalExpense = 0;
+            list.innerHTML = '';
+            
+            if (snap.empty) {
+                list.innerHTML = '<p style="text-align:center; color:#777;">אין תנועות לחודש זה.</p>';
+            }
+            
+            let records = [];
+            snap.forEach(doc => {
+                const data = doc.data();
+                data.id = doc.id;
+                records.push(data);
+            });
+            records.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            
+            let html = '';
+            records.forEach(r => {
+                const amt = Number(r.amount) || 0;
+                if (r.type === 'income') totalIncome += amt; else totalExpense += amt;
+                let color = r.type === 'income' ? '#28a745' : '#dc3545';
+                let sign = r.type === 'income' ? '+' : '-';
+                let dateFormatted = r.date ? r.date.split('-').reverse().join('.') : '';
+                
+                html += `
+                <div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; align-items:center;">
+                    <div style="flex:1;"><strong>${esc(r.desc)}</strong><br><span style="font-size:12px; color:#777;">${esc(dateFormatted)}</span></div>
+                    <div style="color:${color}; font-weight:bold; direction:ltr; margin-left: 10px;">${sign} ₪${amt}</div>
+                    <div style="display:flex; gap:5px;">
+                        <button style="background:none; border:none; color:#007bff; font-size:16px; cursor:pointer; padding:5px;" onclick="editFinanceRecord('${esc(r.id)}')">✏️</button>
+                        <button style="background:none; border:none; color:#dc3545; font-size:16px; cursor:pointer; padding:5px;" onclick="deleteFinanceRecord('${esc(r.id)}')">🗑️</button>
+                    </div>
+                </div>`;
+            });
+            if (records.length > 0) {
+                list.innerHTML = html;
+            }
+            
+            const incomeEl = document.getElementById('finIncomeStat');
+            const expenseEl = document.getElementById('finExpenseStat');
+            if (incomeEl) incomeEl.innerText = '₪ ' + totalIncome;
+            if (expenseEl) expenseEl.innerText = '₪ ' + totalExpense;
+            
+            let profit = totalIncome - totalExpense;
+            let dashProfit = document.getElementById('dashStatProfit');
+            if (dashProfit) dashProfit.innerText = '₪ ' + profit;
+            let dashIncome = document.getElementById('dashStatIncome');
+            if (dashIncome) dashIncome.innerText = '₪ ' + totalIncome;
+        }).catch(err => {
+            console.error("Error loading finance data:", err);
+            list.innerHTML = '<p style="text-align:center; color:#dc3545;">שגיאה בטעינת נתונים פיננסיים.</p>';
+        });
+    };
+
+    window.deleteFinanceRecord = function(id) {
+        if (confirm("האם למחוק תנועה זו?")) {
+            db.collection('finance').doc(id).delete().then(() => {
+                loadFinanceData();
+            }).catch(err => {
+                console.error("Error deleting finance record:", err);
+                alert("שגיאה במחיקת התנועה");
+            });
+        }
+    };
+
+    // ==========================================
+    // שמירת לקוחה ישירות מהמסך "ניהול לקוחות"
+    // ==========================================
+    window.saveNewClientDirect = function() {
+        const nameInput = document.getElementById('addClientName');
+        const phoneInput = document.getElementById('addClientPhone');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const rawPhone = phoneInput ? phoneInput.value.trim() : '';
+
+        if (!name || !rawPhone) { alert("יש להזין שם ומספר טלפון"); return; }
+        const phone = window.cleanPhoneNumber(rawPhone);
+        if (!phone || phone.length < 9) { alert("מספר טלפון לא נראה תקין"); return; }
+
+        const btn = document.querySelector('#addClientModal .btn-submit');
+        if (btn) {
+            btn.innerText = 'שומר...'; 
+            btn.disabled = true;
+        }
+
+        db.collection("users").doc(phone).set({
+            name: name,
+            phone: phone,
+            status: 'approved'
+        }).then(() => {
+            alert("הלקוחה הוספה בהצלחה לרשימת הלקוחות שלך! ✅");
+            const modal = document.getElementById('addClientModal');
+            if (modal) modal.classList.remove('active');
+            if (nameInput) nameInput.value = '';
+            if (phoneInput) phoneInput.value = '';
+        }).catch(err => {
+            console.error("Error adding client:", err);
+            alert("שגיאה בשמירת הלקוחה.");
+        }).finally(() => {
+            if (btn) {
+                btn.innerText = 'שמירת לקוחה במערכת'; 
+                btn.disabled = false;
+            }
+        });
+    };
+
+    // ==========================================
+    // פרטי לקוחה (כרטיס לקוחה)
+    // ==========================================
+    window.openClientDetails = function(phone) {
+        if (!phone) return;
+        const allUsers = JSON.parse(localStorage.getItem('allUsers')) || [];
+        const user = allUsers.find(u => u && u.phone === phone) || { name: 'לקוחה', phone: phone };
+        const allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
+        const clientApps = allApps.filter(a => a && a.clientPhone === phone);
+        
+        clientApps.sort((a, b) => (b.fullDate || '').localeCompare(a.fullDate || ''));
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        let attended = 0;
+        let canceled = 0;
+
+        clientApps.forEach(a => {
+            if (a.status === 'approved' && ((a.fullDate && a.fullDate <= todayStr) || a.clientConfirmed)) {
+                attended++;
+            } else if (a.status === 'canceled' || (a.statusText && a.statusText.includes('בוטל'))) {
+                canceled++;
+            }
+        });
+
+        const nameEl = document.getElementById('cdName');
+        const phoneEl = document.getElementById('cdPhone');
+        const statsEl = document.getElementById('cdStats');
+        const historyList = document.getElementById('cdHistoryList');
+
+        if (nameEl) nameEl.textContent = user.name || 'לקוחה';
+        
+        const cleanP = (phone || '').replace(/^0/, '');
+        if (phoneEl) {
+            phoneEl.innerHTML = `
+                <span>${esc(phone)}</span>
+                <div style="margin-top:6px; display:flex; justify-content:center; gap:12px;">
+                    <a href="tel:${esc(phone)}" style="text-decoration:none; color:#007bff; font-weight:bold; font-size:13px;">📞 התקשרות</a>
+                    <a href="https://wa.me/972${esc(cleanP)}" target="_blank" rel="noopener" style="text-decoration:none; color:#25D366; font-weight:bold; font-size:13px;">💬 WhatsApp</a>
+                </div>
+            `;
+        }
+
+        if (statsEl) {
+            statsEl.innerHTML = `
+                <div class="stat-card" style="padding:8px;"><span>סה״כ תורים</span><strong>${clientApps.length}</strong></div>
+                <div class="stat-card" style="padding:8px;"><span>הגיעו</span><strong style="color:#28a745;">${attended}</strong></div>
+                <div class="stat-card" style="padding:8px;"><span>ביטולים</span><strong style="color:#dc3545;">${canceled}</strong></div>
+            `;
+        }
+
+        if (historyList) {
+            if (clientApps.length === 0) {
+                historyList.innerHTML = '<p style="text-align:center; color:#777; font-size:13px; margin:5px 0;">אין היסטוריית תורים ללקוחה זו.</p>';
+            } else {
+                let histHtml = '';
+                clientApps.forEach(a => {
+                    let badgeColor = '#007bff';
+                    let statusLabel = a.statusText || a.status || '';
+                    if (a.status === 'approved') badgeColor = '#28a745';
+                    if (a.status === 'canceled') badgeColor = '#dc3545';
+                    if (a.status === 'pending') badgeColor = '#ffc107';
+
+                    histHtml += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #eee; font-size:13px;">
+                            <div>
+                                <strong>${esc(a.treatment || 'טיפול')}</strong>
+                                <div style="font-size:11px; color:#777;">${esc(a.date || a.fullDate || '')} | ${esc(a.time || '')}</div>
+                            </div>
+                            <span style="font-size:11px; color:${badgeColor}; font-weight:bold;">${esc(statusLabel)}</span>
+                        </div>
+                    `;
+                });
+                historyList.innerHTML = histHtml;
+            }
+        }
+
+        const modal = document.getElementById('clientDetailsModal');
+        if (modal) modal.classList.add('active');
+    };
+
+    // ==========================================
+    // סטטיסטיקת תורים לפי סינון (חודש / שבוע / שנה / הכל)
+    // ==========================================
+    window.loadAppointmentsStats = function() {
+        const filterEl = document.getElementById('appStatsFilter');
+        const filter = filterEl ? filterEl.value : 'month';
+        const allApps = JSON.parse(localStorage.getItem('myAppointments')) || [];
+        
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const currentMonthStr = todayStr.substring(0, 7);
+        const currentYearStr = todayStr.substring(0, 4);
+
+        const dayOfWeek = now.getDay();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - dayOfWeek);
+        const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+
+        let arrived = 0;
+        let cancelClient = 0;
+
+        allApps.forEach(app => {
+            if (!app || !app.fullDate) return;
+
+            let inPeriod = false;
+            if (filter === 'month' && app.fullDate.startsWith(currentMonthStr)) inPeriod = true;
+            else if (filter === 'year' && app.fullDate.startsWith(currentYearStr)) inPeriod = true;
+            else if (filter === 'week' && app.fullDate >= startOfWeekStr && app.fullDate <= endOfWeekStr) inPeriod = true;
+            else if (filter === 'all') inPeriod = true;
+
+            if (inPeriod) {
+                if (app.status === 'approved' && app.fullDate <= todayStr) {
+                    arrived++;
+                } else if (app.status === 'canceled') {
+                    if (app.cancelSource === 'client' || (app.statusText && (app.statusText.includes('ידך') || app.statusText.includes('לקוחה')))) {
+                        cancelClient++;
+                    }
+                }
+            }
+        });
+
+        const arrivedEl = document.getElementById('appStatArrived');
+        const cancelClientEl = document.getElementById('appStatCancelClient');
+        if (arrivedEl) arrivedEl.innerText = arrived;
+        if (cancelClientEl) cancelClientEl.innerText = cancelClient;
+    };
+
+    // ==========================================
+    // שליחת הודעת תפוצה ב-WhatsApp ללקוחות מאושרות
+    // ==========================================
+    window.openWaBroadcastModal = function() {
+        const msgInput = document.getElementById('broadcastMsg');
+        const rawMsg = msgInput ? msgInput.value.trim() : '';
+        const encodedMsg = encodeURIComponent(rawMsg);
+        
+        const allUsers = JSON.parse(localStorage.getItem('allUsers')) || [];
+        const approvedUsers = allUsers.filter(u => u && u.status === 'approved');
+        approvedUsers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const listEl = document.getElementById('waBroadcastList');
+        if (listEl) {
+            if (approvedUsers.length === 0) {
+                listEl.innerHTML = '<p style="text-align:center; color:#777; font-size:13px;">אין לקוחות פעילות ברשימה.</p>';
+            } else {
+                let html = '';
+                approvedUsers.forEach(u => {
+                    let cleanPhone = (u.phone || '').replace(/^0/, '');
+                    let waUrl = `https://wa.me/972${cleanPhone}` + (encodedMsg ? `?text=${encodedMsg}` : '');
+                    html += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee;">
+                            <div>
+                                <strong>${esc(u.name || 'לקוחה')}</strong>
+                                <div style="font-size:12px; color:#777;">${esc(u.phone || '')}</div>
+                            </div>
+                            <a href="${waUrl}" target="_blank" rel="noopener" class="btn-submit" style="width:auto; padding:6px 14px; background:#25D366; color:white; text-decoration:none; font-size:13px; margin:0; display:inline-block;">שלח 💬</a>
+                        </div>
+                    `;
+                });
+                listEl.innerHTML = html;
+            }
+        }
+
+        const modal = document.getElementById('waBroadcastModal');
+        if (modal) modal.classList.add('active');
     };
 
     // ==========================================
