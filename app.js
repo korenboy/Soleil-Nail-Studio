@@ -13,6 +13,18 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 const functions = firebase.functions();
 
+function normalizePhone(raw) {
+    if (!raw || (typeof raw !== 'string' && typeof raw !== 'number')) return null;
+    let p = String(raw).trim().replace(/[\s\-()]/g, '');
+    if (p.startsWith('+972')) p = '0' + p.slice(4);
+    else if (p.startsWith('972')) p = '0' + p.slice(3);
+    if (!p.startsWith('0') && p.length === 9 && p.startsWith('5')) {
+        p = '0' + p;
+    }
+    return /^05\d{8}$/.test(p) ? p : null;
+}
+window.normalizePhone = normalizePhone;
+
 let currentUserPhone = null;
 let currentUserName = null;
 let myAppsUnsubscribe = null;
@@ -245,12 +257,9 @@ let pendingUserDetails = null;
 
 document.getElementById('requestOtpBtn')?.addEventListener('click', async () => {
     const nameInput = document.getElementById('loginName')?.value.trim() || ""; 
-    let phoneInput = document.getElementById('loginPhone')?.value.trim() || "";
+    const cleanPhone = normalizePhone(phoneInput);
+    if (!cleanPhone) { alert("❌ אנא הכניסי מספר טלפון נייד ישראלי תקין."); return; }
     
-    if (nameInput.length < 2) { alert("❌ אנא הכניסי שם (לפחות 2 תווים)."); return; }
-    if (!/^05\d-?\d{7}$/.test(phoneInput)) { alert("❌ אנא הכניסי מספר טלפון נייד ישראלי תקין."); return; }
-    
-    let cleanPhone = phoneInput.replace('-', '');
     pendingUserDetails = { name: nameInput, phone: cleanPhone };
     
     const btn = document.getElementById('requestOtpBtn');

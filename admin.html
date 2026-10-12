@@ -2217,32 +2217,28 @@ window.saveShift = async function() {
     // ==========================================
     // מסנן לסידור מספרי טלפון אוטומטי מה-AutoFill
     // ==========================================
-    window.cleanPhoneNumber = function(phone) {
-        if (!phone) return "";
-        // 1. מחיקת רווחים, מקפים וסוגריים
-        let cleaned = phone.replace(/[\s\-()]/g, '');
-        
-        // 2. החלפת קידומת בינלאומית ישראלית באפס
-        if (cleaned.startsWith('+972')) {
-            cleaned = '0' + cleaned.substring(4);
-        } else if (cleaned.startsWith('972')) {
-            cleaned = '0' + cleaned.substring(3);
-        }
-        
-        // 3. אם המספר הוזן בלי אפס ויש לו 9 ספרות (לדוגמה 541234567)
-        if (!cleaned.startsWith('0') && cleaned.length === 9) {
-            cleaned = '0' + cleaned;
-        }
-        
-        return cleaned;
-    };
-
     window.normalizePhone = function(raw) {
-        if (typeof raw !== 'string') return null;
-        let p = raw.replace(/[\s\-()]/g, '');
+        if (!raw || (typeof raw !== 'string' && typeof raw !== 'number')) return null;
+        let p = String(raw).trim().replace(/[\s\-()]/g, '');
         if (p.startsWith('+972')) p = '0' + p.slice(4);
         else if (p.startsWith('972')) p = '0' + p.slice(3);
+        if (!p.startsWith('0') && p.length === 9 && p.startsWith('5')) {
+            p = '0' + p;
+        }
         return /^05\d{8}$/.test(p) ? p : null;
+    };
+
+    window.cleanPhoneNumber = function(phone) {
+        if (!phone) return "";
+        const normalized = window.normalizePhone(phone);
+        if (normalized) return normalized;
+        let cleaned = String(phone).replace(/[\s\-()]/g, '');
+        if (cleaned.startsWith('+972')) cleaned = '0' + cleaned.substring(4);
+        else if (cleaned.startsWith('972')) cleaned = '0' + cleaned.substring(3);
+        if (!cleaned.startsWith('0') && cleaned.length === 9 && cleaned.startsWith('5')) {
+            cleaned = '0' + cleaned;
+        }
+        return cleaned;
     };
 
     // === טעינת מספר מנהלת נוכחי במערכת ===

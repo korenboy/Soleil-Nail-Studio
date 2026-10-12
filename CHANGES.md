@@ -84,4 +84,28 @@
   - `node tests/handlers.test.js` — עבר בהצלחה (0 missing).
   - בדיקת סינטקס של כל הסקריפטים ב-`admin.html` — עבר בהצלחה.
 
+---
+
+## שלב 3: נרמול מספרי טלפון גלובלי (`fix(auth): unify Israeli phone normalization across client and server`)
+- **מטרה**: יצירת תקן נרמול אחיד (Standard 3.2) למספרי טלפון ישראליים בצד שרת ובצד לקוח, כולל תמיכה בפורמטים בינלאומיים, חוסר ב-0 מוביל, מקפים, רווחים וסוגריים.
+- **קבצים שנערכו / נוצרו**:
+  1. `functions/phone.js`:
+     - מודול ייעודי `normalizePhone(raw)` המנקה תווים לא מספריים, מתרגם `+972` ו-`972` ל-`0`, מוסיף `0` מוביל למספרי 9 ספרות (כגון `541234567`), ומוודא תקינות לפי ביטוי רגולרי `^05\d{8}$`.
+  2. `functions/index.js`:
+     - ייבוא `normalizePhone` מ-`./phone`.
+     - החלת הנרמול בכל פונקציות הענן: `sendOtpSms`, `verifyOtpAndLogin`, `sendBroadcastSms`, `sendReminderSms`, `verifyAndChangeAdminPhone`, `sendPulseemSMS`.
+  3. `admin.html`:
+     - עדכון `window.normalizePhone` ו-`window.cleanPhoneNumber` להתבססות מלאה על תקן 3.2.
+  4. `app.js`:
+     - הוספת פונקציית `normalizePhone(raw)`.
+     - החלפת הוולידציה הישנה והמוגבלת בטופס ההתחברות (`requestOtpBtn`) ב-`normalizePhone`.
+  5. `tests/normalizePhone.test.js`:
+     - סוויטת בדיקות יחידה מקיפה עם 22 מקרי בדיקה (מספרים רגילים, מקפים, סוגריים, רווחים, קידומות בינלאומיות, 9 ספרות, קלט מספרי, ערכי null/undefined, מספרים קצרים/ארוכים, אותיות, בוליאנים, אובייקטים).
+- **בדיקות תקינות שהורצו**:
+  - `node tests/normalizePhone.test.js` — 22/22 עברו בהצלחה.
+  - `node tests/handlers.test.js` — עבר בהצלחה מלאה.
+  - `node --check functions/index.js` — עבר ללא שגיאות.
+  - `node --check app.js` — עבר ללא שגיאות.
+
+
 

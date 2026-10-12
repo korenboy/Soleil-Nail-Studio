@@ -15,13 +15,7 @@ const { onCall } = require('firebase-functions/v2/https');
     const { onDocumentWritten } = require('firebase-functions/v2/firestore');
     const { google } = require('googleapis');
 
-    function normalizePhone(raw) {
-        if (typeof raw !== 'string') return null;
-        let p = raw.replace(/[\s\-()]/g, '');
-        if (p.startsWith('+972')) p = '0' + p.slice(4);
-        else if (p.startsWith('972')) p = '0' + p.slice(3);
-        return /^05\d{8}$/.test(p) ? p : null;
-    }
+    const { normalizePhone } = require('./phone');
 
     async function sendTelegramMessage(text) {
         if (!TELEGRAM_BOT_TOKEN) return;
@@ -77,8 +71,9 @@ const { onCall } = require('firebase-functions/v2/https');
 
     exports.sendOtpSms = onCall({ cors: true, invoker: "public" }, async (request) => {
         try {
-            const phone = request.data.phone || request.data.phoneNumber;
-            if (!phone) throw new Error("No phone number received");
+            const rawPhone = request.data.phone || request.data.phoneNumber;
+            const phone = normalizePhone(rawPhone);
+            if (!phone) throw new Error("מספר טלפון לא תקין. יש להזין מספר נייד ישראלי תקין.");
 
             const otpRef = db.collection('otps').doc(phone);
             const existing = await otpRef.get();
@@ -112,8 +107,10 @@ const { onCall } = require('firebase-functions/v2/https');
     // 🌟 פונקציית האימות המאובטחת עם הגנת פריצות ותג מנהלת 🌟
     exports.verifyOtpAndLogin = onCall({ cors: true, invoker: "public" }, async (request) => {
         try {
-            const { phone, code } = request.data;
-            if (!phone || !code) throw new Error("Missing phone or code");
+            const rawPhone = request.data.phone || request.data.phoneNumber;
+            const phone = normalizePhone(rawPhone);
+            const { code } = request.data;
+            if (!phone || !code) throw new Error("מספר טלפון או קוד אימות חסר או לא תקין");
 
             const otpRef = db.collection('otps').doc(phone);
             const doc = await otpRef.get();
@@ -175,8 +172,11 @@ const { onCall } = require('firebase-functions/v2/https');
             return { success: false, error: "Permission denied. Admin only." };
         }
         const { message, phones } = request.data;
-        if (phones) {
-            for (const phone of phones) { await sendPulseemSMS(phone, message); }
+        if (phones && Array.isArray(phones)) {
+            for (const rawPhone of phones) {
+                const phone = normalizePhone(rawPhone);
+                if (phone) await sendPulseemSMS(phone, message);
+            }
         }
         return { success: true };
     });
@@ -186,7 +186,11 @@ const { onCall } = require('firebase-functions/v2/https');
         if (!request.auth || request.auth.token.admin !== true) {
             return { success: false, error: "Permission denied. Admin only." };
         }
-        const { phone, clientName, date, time, id } = request.data; 
+        const { clientName, date, time, id } = request.data; 
+        const phone = normalizePhone(request.data.phone);
+        if (!phone) {
+            return { success: false, error: "מספר טלפון לא תקין." };
+        }
         const address = process.env.CLINIC_ADDRESS || "";
         const confirmLink = `https://soleilnailstudio.co.il/?action=confirm_arrival&id=${id}`;
         
