@@ -504,6 +504,19 @@
     const auth = firebase.auth(); 
     let pendingAdminPhone = null;
 
+    // מסנן לסידור מספרי טלפון ישראליים תקניים
+    function normalizePhone(raw) {
+        if (!raw || (typeof raw !== 'string' && typeof raw !== 'number')) return null;
+        let p = String(raw).trim().replace(/[\s\-()]/g, '');
+        if (p.startsWith('+972')) p = '0' + p.slice(4);
+        else if (p.startsWith('972')) p = '0' + p.slice(3);
+        if (!p.startsWith('0') && p.length === 9 && p.startsWith('5')) {
+            p = '0' + p;
+        }
+        return /^05\d{8}$/.test(p) ? p : null;
+    }
+    window.normalizePhone = normalizePhone;
+
     // פונקציה לניקוי קוד זדוני (XSS Escape)
     function esc(str) {
         if (!str) return '';
@@ -567,34 +580,23 @@
     });
 
     window.requestAdminOtp = async function() {
-        let phone = document.getElementById('adminPhoneInput').value.trim();
-        if(!phone || phone.length < 9) {
-            alert("נא להזין מספר טלפון חוקי");
+        let phoneInput = document.getElementById('adminPhoneInput')?.value.trim() || '';
+        let cleanPhone = normalizePhone(phoneInput);
+        if(!cleanPhone) {
+            alert("❌ נא להזין מספר טלפון נייד ישראלי תקין (לדוגמה: 0501234567)");
             return;
         }
 
         const btn = document.getElementById('reqAdminBtn');
-        btn.innerText = "מוודא הרשאות..."; btn.disabled = true;
+        let originalText = "שלחי לי קוד ב-SMS";
+        if (btn) {
+            originalText = btn.innerText;
+            btn.innerText = "שולח קוד...";
+            btn.disabled = true;
+        }
 
         try {
-            let actualAdminPhone = "0501234567"; // ברירת מחדל
-            const doc = await db.collection('settings').doc('adminConfig').get();
-            if (doc.exists && doc.data().adminPhone) {
-                actualAdminPhone = doc.data().adminPhone;
-            } else {
-                await db.collection('settings').doc('adminConfig').set({ adminPhone: actualAdminPhone });
-            }
-
-            let cleanPhone = phone.replace('-', '');
-
-            if(cleanPhone !== actualAdminPhone.replace('-', '')) { 
-                alert("❌ מס' לא מורשה. הגישה נדחתה."); 
-                btn.innerText = "שלחי לי קוד ב-SMS"; btn.disabled = false;
-                return; 
-            }
-            
             pendingAdminPhone = cleanPhone;
-            btn.innerText = "שולח קוד...";
             
             const sendOtpSms = functions.httpsCallable('sendOtpSms');
             const result = await sendOtpSms({ phone: cleanPhone });
@@ -606,13 +608,16 @@
                 const firstOtpInput = document.querySelector('.admin-otp');
                 if(firstOtpInput) firstOtpInput.focus();
             } else {
-                alert("❌ " + (result.data.error || "שגיאה בשליחת הודעה דרך השרת."));
+                alert("❌ " + (result.data?.error || "שגיאה בשליחת הודעה דרך השרת."));
             }
         } catch (error) {
-            console.error(error);
-            alert("שגיאה בשליחת הודעה, נסי לרענן את העמוד.");
+            console.error("Admin OTP Send Error:", error);
+            alert("❌ שגיאה בשליחת קוד אימות: " + (error.message || "נסי לרענן את העמוד."));
         } finally {
-            btn.innerText = "שלחי לי קוד ב-SMS"; btn.disabled = false;
+            if (btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
         }
     };
 
@@ -632,23 +637,30 @@
             const result = await verifyOtpFunc({ phone: pendingAdminPhone, code: enteredCode });
             
             if (result.data && result.data.success) {
+                if (!result.data.isAdmin) {
+                    alert("❌ שגיאת הרשאות: מספר זה אינו מורשה כמנהלת המערכת.");
+                    adminOtpInputs.forEach(i => i.value = '');
+                    if(adminOtpInputs.length > 0) adminOtpInputs[0].focus();
+                    return;
+                }
+
                 await auth.signInWithCustomToken(result.data.token);
 
                 localStorage.setItem('adminLoggedIn', 'true');
                 document.getElementById('adminAuthScreen').style.display = 'none';
                 document.getElementById('adminAppWrapper').style.display = 'flex';
                 
-                // 🔥 התיקון: הפעלת ההאזנה ללקוחות ותורים מיד אחרי הכניסה!
+                // 🔥 הפעלת ההאזנה ללקוחות ותורים מיד אחרי הכניסה!
                 initAdminListeners();
                 loadAllAdminData();
             } else {
-                alert("❌ " + (result.data.error || "שגיאה מהשרת"));
+                alert("❌ " + (result.data?.error || "קוד אימות שגוי"));
                 adminOtpInputs.forEach(i => i.value = '');
                 if(adminOtpInputs.length > 0) adminOtpInputs[0].focus();
             }
         } catch (error) {
             console.error("Admin OTP Error:", error);
-            alert("שגיאת רשת מול השרת.");
+            alert("❌ שגיאת רשת מול השרת: " + (error.message || error));
         } finally {
             if (btn) { btn.innerText = originalText; btn.disabled = false; }
         }
@@ -681,7 +693,17 @@
                 if(event.key === 'Backspace' && event.target.value === '' && index > 0) { 
                     adminOtpInputs[index - 1].focus(); 
                 } 
-            }); 
+            });
+
+            // הדבקה אוטומטית של קוד SMS מלא (6 ספרות)
+            input.addEventListener('paste', (event) => {
+                const pasteData = (event.clipboardData || window.clipboardData)?.getData('text')?.trim() || '';
+                if (/^\d{6}$/.test(pasteData)) {
+                    event.preventDefault();
+                    adminOtpInputs.forEach((inp, i) => { inp.value = pasteData[i] || ''; });
+                    adminOtpInputs[adminOtpInputs.length - 1].focus();
+                }
+            });
         });
     }
 
@@ -781,17 +803,6 @@
 
     window.toggleNotifications = function() {
     document.getElementById('notifDropdown').classList.toggle('active');
-};
-
-window.openManualBookModal = function() {
-    document.getElementById('manualBookModal').classList.add('active');
-    // טעינת הטיפולים לתוך חלון הקביעה הידנית
-    const manualSelect = document.getElementById('manualTreatment');
-    const treatments = JSON.parse(localStorage.getItem('adminTreatments')) || [];
-    manualSelect.innerHTML = '<option value="">בחרי טיפול...</option>';
-    treatments.forEach(t => {
-        manualSelect.innerHTML += `<option value="${parseInt(t.duration, 10) || 60}|${esc(t.name)}">${esc(t.name)}</option>`;
-    });
 };
 
 window.closeManualBookModal = function() {
@@ -1194,7 +1205,8 @@ window.removeFromWaitlist = function(id) {
             alert(`הודעת SMS נשלחה בהצלחה לכל הלקוחות!`);
             document.getElementById('broadcastMsg').value = '';
         } catch (e) {
-            alert("שגיאה בשליחת תפוצה");
+            console.error("Broadcast SMS error:", e);
+            alert("❌ שגיאה בשליחת תפוצה: " + (e.message || e));
         } finally {
             btn.innerText = "SMS"; btn.disabled = false;
         }
@@ -1754,11 +1766,11 @@ window.saveShift = async function() {
         const dateVal = document.getElementById('manualDateSelect').value;
         const timeVal = document.getElementById('manualTimeSelect').value;
         let clientName = '', clientPhone = '';
-
         if (document.getElementById('newClientManualForm').style.display === 'block') {
             clientName = document.getElementById('newClientName').value.trim();
-            clientPhone = document.getElementById('newClientPhone').value.trim();
-            if (!clientName || !clientPhone) { alert("מלאי פרטי לקוחה חדשה"); return; }
+            const rawClientPhone = document.getElementById('newClientPhone').value.trim();
+            if (!clientName || !rawClientPhone) { alert("מלאי פרטי לקוחה חדשה"); return; }
+            clientPhone = window.cleanPhoneNumber ? window.cleanPhoneNumber(rawClientPhone) : rawClientPhone;
             db.collection("users").doc(clientPhone).set({ name: clientName, phone: clientPhone, status: 'approved' });
         } else if (selectedManualClient) {
             clientName = selectedManualClient.name;

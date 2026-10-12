@@ -141,18 +141,22 @@ const { onCall } = require('firebase-functions/v2/https');
             // 👑 בדיקה חכמה לזיהוי המנהלת (נטלי) עם נרמול טלפונים 👑
             let isAdmin = false;
             const adminConfig = await db.collection('settings').doc('adminConfig').get();
-            if (adminConfig.exists) {
-                let dbAdminPhone = adminConfig.data().adminPhone || "";
-                
-                // הופך מספרים כמו +972501234567 ל-0501234567
-                let cleanDb = dbAdminPhone.replace(/[\s\-+]/g, '');
-                if (cleanDb.startsWith('972')) cleanDb = '0' + cleanDb.substring(3);
-                
-                let cleanIncoming = phone.replace(/[\s\-+]/g, '');
-                if (cleanIncoming.startsWith('972')) cleanIncoming = '0' + cleanIncoming.substring(3);
+            if (adminConfig.exists && adminConfig.data()?.adminPhone) {
+                const dbAdminPhone = normalizePhone(adminConfig.data().adminPhone) || adminConfig.data().adminPhone.replace(/[\s\-+]/g, '');
+                const cleanIncoming = normalizePhone(phone) || phone.replace(/[\s\-+]/g, '');
 
-                if (cleanDb === cleanIncoming) {
+                if (dbAdminPhone === cleanIncoming) {
                     isAdmin = true;
+                }
+            } else {
+                // ברירת מחדל ראשונית אם המסמך טרם נוצר במסד הנתונים
+                const defaultAdmin = "0501234567";
+                if (normalizePhone(phone) === defaultAdmin) {
+                    isAdmin = true;
+                    await db.collection('settings').doc('adminConfig').set({
+                        adminPhone: defaultAdmin,
+                        createdAt: admin.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
                 }
             }
 

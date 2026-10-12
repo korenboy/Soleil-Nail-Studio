@@ -568,9 +568,11 @@ window.joinWaitlist = function(fullDate, displayDate) {
     const selectedTreatment = document.querySelector('.treatment-card.selected h2')?.innerText || "לא נבחר טיפול";
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     
+    const clientPhone = (auth.currentUser ? auth.currentUser.uid : (currentUserPhone || (currentUser ? currentUser.phone : '')));
+    const clientName = currentUserName || (currentUser ? currentUser.name : 'לקוחה');
     const wlId = Date.now().toString();
     db.collection('waitlist').doc(wlId).set({
-        id: wlId, clientName: currentUserName || currentUser.name, clientPhone: currentUserPhone || currentUser.phone,
+        id: wlId, clientName: clientName, clientPhone: clientPhone,
         treatment: selectedTreatment, fullDate: fullDate, date: displayDate, preferences: prefs, timestamp: firebase.firestore.FieldValue.serverTimestamp()
     }).then(() => {
         document.getElementById('dynamicTimesList').innerHTML = '<p style="text-align:center; color:#28a745; font-weight:bold; grid-column:1/-1; padding:20px; border:1px solid #28a745; border-radius:12px;">✨ נרשמת לרשימת ההמתנה! נעדכן אותך אם יתפנה מקום.</p>';
