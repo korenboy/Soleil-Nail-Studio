@@ -54,3 +54,34 @@
   - בדיקת סינטקס של כל הסקריפטים ב-`admin.html` דרך `new Function(...)` — עבר ללא שגיאות.
   - `node --check functions/index.js` — עבר ללא שגיאות.
 
+---
+
+## שלב 2: אבטחת XSS בפאנל האדמין (`fix(admin): eliminate stored XSS and harden event binding`)
+- **מטרה**: מניעת Stored XSS ו-CRLF injection בכל חלקי פאנל האדמין שפולטים מידע מהענן.
+- **קבצים שנערכו**:
+  1. `admin.html`:
+     - הוספת פונקציית העזר `escICS(str)` המנקה `\r\n`, `\r`, `\n`, פסיקים ונקודה-פסיק למניעת CRLF Injection בקובצי iCalendar (.ics).
+     - חשיפת `window.esc = esc` ו-`window.escICS = escICS`.
+     - שדרוג `exportAdminCalendar`:
+       - סינון וניקוי של `clientName`, `treatment`, `clientPhone` באמצעות `escICS`.
+       - ניקוי `app.id` לתווים אלפאנומריים בלבד ב-UID.
+     - שדרוג `renderTreatmentsAdmin`:
+       - בריחת XSS מלאה על `t.name` בעזרת `esc()`.
+       - וידוא קבלת `t.id || t._id` בכל פריט וחיטוי המזהה לפני שילובו ב-DOM.
+       - חיטוי אפשרויות ה-`<option>` של `manualTreatment`.
+     - שדרוג `renderUsers`:
+       - בריחת XSS מלאה על `user.name` ו-`user.phone` עם `esc()`.
+     - שדרוג `loadAppointmentsData`:
+       - חיטוי `app.id`, `app.date`, `app.time` בלחצנים ובכרטיסים.
+     - שדרוג `renderWaitlistAdmin`:
+       - החלפת `window.open` עם מחרוזות משורשרות בלינק ישיר ומאובטח המשתמש ב-`encodeURIComponent`.
+       - חיטוי `w.id`, `w.date`.
+     - שדרוג `filterClientsForManual`:
+       - הסרת `onclick` משורשר דינמית והחלפה ב-event delegation בטוח על מיכל התוצאות, לצד `esc()` על שם וטלפון הלקוחה.
+     - שדרוג תצוגת לוח השנה היומי:
+       - חיטוי `app.id` ו-`app.time` בכפתורי עריכה וביטול.
+- **בדיקות תקינות שהורצו**:
+  - `node tests/handlers.test.js` — עבר בהצלחה (0 missing).
+  - בדיקת סינטקס של כל הסקריפטים ב-`admin.html` — עבר בהצלחה.
+
+

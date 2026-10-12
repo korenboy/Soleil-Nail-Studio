@@ -504,11 +504,24 @@
     const auth = firebase.auth(); 
     let pendingAdminPhone = null;
 
-    // פונקציה לניקוי קוד זדוני (XSS Escape) שהוספנו מוקדם יותר
+    // פונקציה לניקוי קוד זדוני (XSS Escape)
     function esc(str) {
         if (!str) return '';
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
+    window.esc = esc;
+
+    // ניקוי קבצי יומן (iCalendar/ICS) מפני הזרקות CRLF ותווים מיוחדים
+    function escICS(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/\\/g, '\\\\')
+            .replace(/;/g, '\\;')
+            .replace(/,/g, '\\,')
+            .replace(/\r\n|\r|\n/g, '\\n')
+            .trim();
+    }
+    window.escICS = escICS;
 
     // 🔥 בדיקת אבטחה אמיתית מול השרת דרך טוקן! 🔥
     auth.onAuthStateChanged(async (user) => {
@@ -777,7 +790,7 @@ window.openManualBookModal = function() {
     const treatments = JSON.parse(localStorage.getItem('adminTreatments')) || [];
     manualSelect.innerHTML = '<option value="">בחרי טיפול...</option>';
     treatments.forEach(t => {
-        manualSelect.innerHTML += `<option value="${t.duration}|${t.name}">${t.name}</option>`;
+        manualSelect.innerHTML += `<option value="${parseInt(t.duration, 10) || 60}|${esc(t.name)}">${esc(t.name)}</option>`;
     });
 };
 
@@ -860,11 +873,15 @@ window.closeManualBookModal = function() {
         if(manualSelect) manualSelect.innerHTML = '<option value="">בחרי טיפול...</option>';
         
         treatments.forEach((t, index) => {
-            let priceText = t.isStartingPrice ? `<span style="font-size:12px;color:#777;">החל מ-</span> ₪${t.price}` : `₪${t.price}`;
+            const treatId = t.id || t._id || '';
+            const safeTreatId = esc(treatId);
+            const tPrice = Number(t.price) || 0;
+            const tDuration = parseInt(t.duration, 10) || 0;
+            let priceText = t.isStartingPrice ? `<span style="font-size:12px;color:#777;">החל מ-</span> ₪${tPrice}` : `₪${tPrice}`;
             
             // חצים לסידור הסדר
-            let upBtn = index > 0 ? `<button style="background:none; border:none; font-size:18px; cursor:pointer;" onclick="moveTreatment('${t.id}', -1)">⬆️</button>` : `<span style="width:24px; display:inline-block;"></span>`;
-            let downBtn = index < treatments.length - 1 ? `<button style="background:none; border:none; font-size:18px; cursor:pointer;" onclick="moveTreatment('${t.id}', 1)">⬇️</button>` : `<span style="width:24px; display:inline-block;"></span>`;
+            let upBtn = index > 0 ? `<button style="background:none; border:none; font-size:18px; cursor:pointer;" onclick="moveTreatment('${safeTreatId}', -1)">⬆️</button>` : `<span style="width:24px; display:inline-block;"></span>`;
+            let downBtn = index < treatments.length - 1 ? `<button style="background:none; border:none; font-size:18px; cursor:pointer;" onclick="moveTreatment('${safeTreatId}', 1)">⬇️</button>` : `<span style="width:24px; display:inline-block;"></span>`;
             
             list.innerHTML += `
             <div class="user-card" style="display:flex; justify-content:space-between; align-items:center;">
@@ -873,15 +890,15 @@ window.closeManualBookModal = function() {
                     ${downBtn}
                 </div>
                 <div style="flex:1;">
-                    <strong>${t.name}</strong><br>
-                    <span style="font-size:12px;color:#777;">${t.duration} דק' | ${priceText}</span>
+                    <strong>${esc(t.name)}</strong><br>
+                    <span style="font-size:12px;color:#777;">${tDuration} דק' | ${priceText}</span>
                 </div>
                 <div style="display:flex; gap:5px;">
-                    <button class="btn-action btn-edit" style="padding:5px 10px;" onclick="editTreatment('${t.id}')">✏️</button>
-                    <button class="btn-action btn-delete" style="border:1px solid #dc3545; padding:5px 10px; border-radius:5px;" onclick="deleteTreatment('${t.id}')">מחיקה</button>
+                    <button class="btn-action btn-edit" style="padding:5px 10px;" onclick="editTreatment('${safeTreatId}')">✏️</button>
+                    <button class="btn-action btn-delete" style="border:1px solid #dc3545; padding:5px 10px; border-radius:5px;" onclick="deleteTreatment('${safeTreatId}')">מחיקה</button>
                 </div>
             </div>`;
-            if(manualSelect) manualSelect.innerHTML += `<option value="${t.duration}|${t.name}">${t.name}</option>`;
+            if(manualSelect) manualSelect.innerHTML += `<option value="${tDuration}|${esc(t.name)}">${esc(t.name)}</option>`;
         });
     };
 
@@ -1032,10 +1049,12 @@ window.closeManualBookModal = function() {
         const pendingList = document.getElementById('pendingUsersList'); const approvedList = document.getElementById('approvedUsersList'); const blockedList = document.getElementById('blockedUsersList');
         if(!pendingList) return; pendingList.innerHTML = ''; approvedList.innerHTML = ''; blockedList.innerHTML = '';
         allUsers.forEach(user => { 
-            let html = `<div class="user-card" onclick="openClientDetails('${user.phone}')"><strong>${user.name}</strong> <span style="font-size:12px; color:#777;">(${user.phone})</span><div style="margin-top:5px; display:flex; gap:5px;" onclick="event.stopPropagation()">`;
-            if(user.status === 'pending') html += `<button class="btn-approve" onclick="changeUserStatus('${user.phone}', 'approved')">אישור</button><button class="btn-block" onclick="changeUserStatus('${user.phone}', 'blocked')">חסימה</button>`;
-            else if(user.status === 'approved') html += `<button class="btn-block" onclick="changeUserStatus('${user.phone}', 'blocked')">חסימה</button>`;
-            else html += `<button class="btn-approve" onclick="changeUserStatus('${user.phone}', 'pending')">שחרור</button>`;
+            const safePhone = esc(user.phone || '');
+            const safeName = esc(user.name || '');
+            let html = `<div class="user-card" onclick="openClientDetails('${safePhone}')"><strong>${safeName}</strong> <span style="font-size:12px; color:#777;">(${safePhone})</span><div style="margin-top:5px; display:flex; gap:5px;" onclick="event.stopPropagation()">`;
+            if(user.status === 'pending') html += `<button class="btn-approve" onclick="changeUserStatus('${safePhone}', 'approved')">אישור</button><button class="btn-block" onclick="changeUserStatus('${safePhone}', 'blocked')">חסימה</button>`;
+            else if(user.status === 'approved') html += `<button class="btn-block" onclick="changeUserStatus('${safePhone}', 'blocked')">חסימה</button>`;
+            else html += `<button class="btn-approve" onclick="changeUserStatus('${safePhone}', 'pending')">שחרור</button>`;
             html += `</div></div>`;
             if (user.status === 'pending') pendingList.innerHTML += html; else if (user.status === 'approved') approvedList.innerHTML += html; else blockedList.innerHTML += html;
         });
@@ -1052,13 +1071,16 @@ window.closeManualBookModal = function() {
             if(!app) return; let isPast = false; if(app.fullDate && app.fullDate < todayStr) isPast = true; else if (app.fullDate === todayStr) { const [h, m] = (app.time || "00:00").split(':').map(Number); if ((h * 60 + m) < currentMinutes) isPast = true; }
             let confirmedText = app.clientConfirmed ? `<span style="color:#28a745; font-size:12px;">✅ אישרה</span>` : '';
             let reminderStatus = app.reminderSmsSent ? '<span style="font-size: 13px; color: #28a745; background: #e8f5e9; padding: 2px 8px; border-radius: 10px; margin-right: 8px;">✉️ תזכורת נשלחה</span>' : '';
-            let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${esc(app.clientPhone)}')">${esc(app.clientName)}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${app.date} | ${app.time}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${esc(app.treatment)} ${confirmedText}</div>`;
+            const safeAppId = esc(app.id || '');
+            const safeDate = esc(app.date || '');
+            const safeTime = esc(app.time || '');
+            let html = `<div class="user-card"><div style="display:flex; justify-content:space-between;"><strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${esc(app.clientPhone)}')">${esc(app.clientName)}${reminderStatus}</span></strong><span style="color:#C2A878; font-weight:bold;">${safeDate} | ${safeTime}</span></div><div style="font-size:13px; color:#555; margin-bottom:10px;">${esc(app.treatment)} ${confirmedText}</div>`;
             if(app.notes) { html += `<div style="margin-bottom: 10px; font-size: 13px; color: #555; background: #fdfbf7; border: 1px dashed #C2A878; padding: 8px; border-radius: 4px;">📝 <b>הערות:</b> ${esc(app.notes)}</div>`; }            
             if (app.status === 'pending') {
-                pendingList.innerHTML += html + `<div style="display:flex; gap:5px;"><button class="btn-approve" onclick="approveApp('${app.id}')">אשרי תור</button><button class="btn-edit" onclick="openEditAppModal('${app.id}')">✏️</button><button class="btn-block" onclick="cancelApp('${app.id}')">ביטול</button></div></div>`;
+                pendingList.innerHTML += html + `<div style="display:flex; gap:5px;"><button class="btn-approve" onclick="approveApp('${safeAppId}')">אשרי תור</button><button class="btn-edit" onclick="openEditAppModal('${safeAppId}')">✏️</button><button class="btn-block" onclick="cancelApp('${safeAppId}')">ביטול</button></div></div>`;
             } else if (app.status === 'approved') {
                 if (isPast) pastList.innerHTML += html + `<div style="font-size:11px; background:#eee; padding:4px; text-align:center; border-radius:4px;">הסתיים ✔️</div></div>`;
-                else approvedList.innerHTML += html + `<div style="display:flex; gap:5px; align-items:center;"><button class="btn-sms" onclick="sendManualSmsReminder('${app.id}')">תזכורת SMS</button><button class="btn-edit" onclick="openEditAppModal('${app.id}')">✏️</button><button class="btn-block" onclick="cancelApp('${app.id}')">ביטול</button></div></div>`;
+                else approvedList.innerHTML += html + `<div style="display:flex; gap:5px; align-items:center;"><button class="btn-sms" onclick="sendManualSmsReminder('${safeAppId}')">תזכורת SMS</button><button class="btn-edit" onclick="openEditAppModal('${safeAppId}')">✏️</button><button class="btn-block" onclick="cancelApp('${safeAppId}')">ביטול</button></div></div>`;
             }
         });
         if (typeof window.loadAppointmentsStats === 'function') window.loadAppointmentsStats();
@@ -1103,20 +1125,25 @@ window.closeManualBookModal = function() {
     
     waitlist.forEach(w => {
         let prefs = w.preferences ? w.preferences.join(', ') : 'כל היום';
-        // הגנת XSS
+        const cleanP = (w.clientPhone || '').replace(/^0/, '');
+        const waText = encodeURIComponent(`היי ${w.clientName || ''}, התפנה לי תור בקליניקה ב-${w.date || ''}! האם תרצי שאקבע לך?`);
+        const waUrl = `https://wa.me/972${cleanP}?text=${waText}`;
+        const safeWId = esc(w.id || '');
+        const safeDate = esc(w.date || '');
+        
         list.innerHTML += `
         <div class="user-card" style="border-right: 4px solid #856404;">
             <div style="display:flex; justify-content:space-between;">
-                <strong><span style="color:#007bff; text-decoration:underline;" onclick="openClientDetails('${esc(w.clientPhone)}')">${esc(w.clientName)}</span></strong>
-                <span style="color:#856404; font-weight:bold;">${w.date}</span>
+                <strong><span style="color:#007bff; text-decoration:underline; cursor:pointer;" onclick="openClientDetails('${esc(w.clientPhone)}')">${esc(w.clientName)}</span></strong>
+                <span style="color:#856404; font-weight:bold;">${safeDate}</span>
             </div>
             <div style="font-size:13px; color:#555; margin-bottom:10px;">
                 ${esc(w.treatment)} <br>
                 <strong>מעדיפה ב:</strong> ${esc(prefs)}
             </div>
             <div style="display:flex; gap:5px;">
-                <button class="btn-submit" style="background:#25D366; color:white; padding:8px;" onclick="window.open('https://wa.me/972${esc(w.clientPhone).substring(1)}?text=היי ${esc(w.clientName)}, התפנה לי תור בקליניקה ב-${w.date}! האם תרצי שאקבע לך?', '_blank')">WhatsApp</button>
-                <button class="btn-block" onclick="removeFromWaitlist('${w.id}')">הסר מרשימה</button>
+                <a href="${waUrl}" target="_blank" rel="noopener" class="btn-submit" style="background:#25D366; color:white; padding:8px 14px; text-decoration:none; display:inline-block; text-align:center; width:auto; margin:0;">WhatsApp</a>
+                <button class="btn-block" onclick="removeFromWaitlist('${safeWId}')">הסר מרשימה</button>
             </div>
         </div>`;
     });
@@ -1223,15 +1250,16 @@ window.removeFromWaitlist = function(id) {
                     let endTimeStr = `${endH}:${endM}`;
                     let blockHeight = Math.max(70, dur * 1.5); 
 
+                    const safeDayAppId = esc(app.id || '');
                     html += `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:15px; border-right:5px solid #C2A878; background:#fff; border-radius:8px; margin-bottom:10px; box-shadow:0 3px 10px rgba(0,0,0,0.04); min-height:${blockHeight}px;">
                         <div style="flex:1;">
-                            <strong style="color:#111; font-size:16px;">${app.time} - ${endTimeStr}</strong> 
+                            <strong style="color:#111; font-size:16px;">${esc(app.time)} - ${endTimeStr}</strong> 
                             <strong style="font-size:16px; text-decoration:underline; cursor:pointer; color:#007bff; margin-right:10px;" onclick="openClientDetails('${esc(app.clientPhone)}')">${esc(app.clientName)}</strong>
                             <br><span style="font-size:14px; color:#555; display:block; margin-top:8px;">${esc(app.treatment)} (${dur} דק')</span>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:8px;">
-                            <button class="btn-edit" style="padding:6px 12px; font-size:13px;" onclick="openEditAppModal('${app.id}')">✏️ ערוך שעות</button>
-                            <button class="btn-block" style="padding:6px 12px; font-size:13px;" onclick="cancelApp('${app.id}')">❌ ביטול תור</button>
+                            <button class="btn-edit" style="padding:6px 12px; font-size:13px;" onclick="openEditAppModal('${safeDayAppId}')">✏️ ערוך שעות</button>
+                            <button class="btn-block" style="padding:6px 12px; font-size:13px;" onclick="cancelApp('${safeDayAppId}')">❌ ביטול תור</button>
                         </div>
                     </div>`;
                 });
@@ -1567,13 +1595,18 @@ window.saveShift = async function() {
             let endM = String(endMin % 60).padStart(2, '0');
             let dtEnd = `${datePart}T${endH}${endM}00`;
 
+            const safeClientName = escICS(app.clientName);
+            const safeTreatment = escICS(app.treatment);
+            const safePhone = escICS(app.clientPhone);
+            const safeUid = String(app.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+
             icsContent += "BEGIN:VEVENT\n";
-            icsContent += `UID:app_${app.id}@soleil.clinic\n`; // מזהה ייחודי קריטי לאייפון!
+            icsContent += `UID:app_${safeUid}@soleil.clinic\n`;
             icsContent += `DTSTAMP:${dtStamp}\n`;
             icsContent += `DTSTART:${dtStart}\n`;
             icsContent += `DTEND:${dtEnd}\n`;
-            icsContent += `SUMMARY:לקוחה: ${app.clientName} (${app.treatment})\n`;
-            icsContent += `DESCRIPTION:טלפון: ${app.clientPhone}\\nטיפול: ${app.treatment}\\nמשך: ${duration} דקות\n`;
+            icsContent += `SUMMARY:לקוחה: ${safeClientName} (${safeTreatment})\n`;
+            icsContent += `DESCRIPTION:טלפון: ${safePhone}\\nטיפול: ${safeTreatment}\\nמשך: ${duration} דקות\n`;
             icsContent += "END:VEVENT\n";
         });
 
@@ -1599,7 +1632,7 @@ window.saveShift = async function() {
         const manualSelect = document.getElementById('manualTreatment');
         const treatments = JSON.parse(localStorage.getItem('adminTreatments')) || [];
         manualSelect.innerHTML = '<option value="">בחרי טיפול...</option>';
-        treatments.forEach(t => { manualSelect.innerHTML += `<option value="${t.duration}|${t.name}">${t.name}</option>`; });
+        treatments.forEach(t => { manualSelect.innerHTML += `<option value="${parseInt(t.duration, 10) || 60}|${esc(t.name)}">${esc(t.name)}</option>`; });
 
         const dateSelect = document.getElementById('manualDateSelect');
         const adminShifts = JSON.parse(localStorage.getItem('adminShifts')) || [];
@@ -1609,7 +1642,7 @@ window.saveShift = async function() {
         dateSelect.innerHTML = '<option value="">בחרי תאריך...</option>';
         upcomingShifts.forEach(s => {
             const parts = s.date.split('-');
-            dateSelect.innerHTML += `<option value="${s.date}">${parts[2]}.${parts[1]} (${s.start}-${s.end})</option>`;
+            dateSelect.innerHTML += `<option value="${esc(s.date)}">${esc(parts[2])}.${esc(parts[1])} (${esc(s.start)}-${esc(s.end)})</option>`;
         });
     };
 
@@ -1637,11 +1670,19 @@ window.saveShift = async function() {
             return;
         }
         
-        resultsDiv.innerHTML = matches.map(u => 
-            `<div style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; background: #fff; transition: 0.2s;" onclick="selectManualClient('${u.name || ''}', '${u.phone || ''}')">
-                <strong style="color: #C2A878;">${u.name || 'ללא שם'}</strong> - ${u.phone || 'ללא טלפון'}
+        resultsDiv.innerHTML = matches.map((u, idx) => 
+            `<div class="manual-client-option" data-idx="${idx}" style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; background: #fff; transition: 0.2s;">
+                <strong style="color: #C2A878;">${esc(u.name || 'ללא שם')}</strong> - ${esc(u.phone || 'ללא טלפון')}
              </div>`
         ).join('');
+
+        resultsDiv.onclick = function(e) {
+            const item = e.target.closest('.manual-client-option');
+            if (!item) return;
+            const idx = parseInt(item.getAttribute('data-idx'), 10);
+            const u = matches[idx];
+            if (u) selectManualClient(u.name || '', u.phone || '');
+        };
     };
 
     // בחירת לקוחה מהחיפוש
